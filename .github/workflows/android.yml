@@ -30,16 +30,16 @@ jobs:
           chmod +x gradlew
         fi
 
-    - name: Build Debug APK
+    - name: Build Release APK
       run: |
         if [ -f "./gradlew" ]; then
-          ./gradlew assembleDebug
+          ./gradlew assembleRelease
         else
-          gradle assembleDebug
+          gradle assembleRelease
         fi
 
-    - name: Upload Debug APK
+    - name: Upload Release APK
       uses: actions/upload-artifact@v4
       with:
-        name: devmanager-debug-apk
-        path: app/build/outputs/apk/debug/app-debug.apk
+        name: devmanager-release-apk
+        path: app/build/outputs/apk/release/*.apk
