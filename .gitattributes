@@ -1,0 +1,7 @@
+# Treat all JAR files as binary — never do line-ending conversion
+*.jar binary
+
+# General binary files
+*.png binary
+*.jpg binary
+*.keystore binary
