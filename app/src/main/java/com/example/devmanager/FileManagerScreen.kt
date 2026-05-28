@@ -653,15 +653,15 @@ fun DrawerContent(viewModel: FileManagerViewModel, onNavigate: () -> Unit, onOpe
     val currentCategory by viewModel.currentCategory.collectAsStateWithLifecycle()
     
     ModalDrawerSheet {
-        Column(modifier = Modifier.fillMaxHeight().padding(vertical = 16.dp)) {
-            // Header
-            Text("DEV MANAGER", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp), color = MaterialTheme.colorScheme.primary)
-            HorizontalDivider()
+        LazyColumn(modifier = Modifier.padding(vertical = 16.dp)) {
+            item {
+                Text("DEV MANAGER", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp), color = MaterialTheme.colorScheme.primary)
+                HorizontalDivider()
+                
+                Text("Storage", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp))
+            }
             
-            // Pinned Section: Storage and Library
-            Text("Storage", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp))
-            
-            storageVolumes.forEach { volume ->
+            items(storageVolumes) { volume ->
                 val icon = if (volume.isRemovable) Icons.Default.SdCard else Icons.Default.Storage
                 NavigationDrawerItem(
                     label = { 
@@ -690,38 +690,35 @@ fun DrawerContent(viewModel: FileManagerViewModel, onNavigate: () -> Unit, onOpe
                 )
             }
             
-            HorizontalDivider()
-            
-            Text("Library", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp))
-            NavigationDrawerItem(label = { Text("Downloads") }, icon = { Icon(Icons.Default.Download, null) }, selected = false, onClick = { viewModel.navigateTo(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
-            NavigationDrawerItem(label = { Text("Images") }, icon = { Icon(Icons.Default.Image, null) }, selected = currentCategory == MediaCategory.IMAGES, onClick = { viewModel.selectCategory(MediaCategory.IMAGES); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
-            NavigationDrawerItem(label = { Text("Videos") }, icon = { Icon(Icons.Default.Movie, null) }, selected = currentCategory == MediaCategory.VIDEOS, onClick = { viewModel.selectCategory(MediaCategory.VIDEOS); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
-            NavigationDrawerItem(label = { Text("Music") }, icon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) }, selected = currentCategory == MediaCategory.MUSIC, onClick = { viewModel.selectCategory(MediaCategory.MUSIC); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
-            NavigationDrawerItem(label = { Text("Documents") }, icon = { Icon(Icons.AutoMirrored.Filled.Article, null) }, selected = false, onClick = { viewModel.navigateTo(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).absolutePath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
-            
-            HorizontalDivider()
-            
-            // Scrollable Tools and Bookmarks content
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                item {
-                    Text("Tools", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-                    NavigationDrawerItem(label = { Text("App Manager") }, icon = { Icon(Icons.Default.Apps, null) }, selected = false, onClick = onOpenAppManager, modifier = Modifier.padding(horizontal = 12.dp))
-                    NavigationDrawerItem(label = { Text("Storage Analyzer") }, icon = { Icon(Icons.Default.Analytics, null) }, selected = false, onClick = onOpenAnalyzer, modifier = Modifier.padding(horizontal = 12.dp))
-                    NavigationDrawerItem(label = { Text("Media Manager") }, icon = { Icon(Icons.Default.PermMedia, null) }, selected = false, onClick = onOpenMediaManager, modifier = Modifier.padding(horizontal = 12.dp))
-                    NavigationDrawerItem(label = { Text("Network Center") }, icon = { Icon(Icons.Default.Public, null) }, selected = false, onClick = onOpenNetworkManager, modifier = Modifier.padding(horizontal = 12.dp))
-                    NavigationDrawerItem(label = { Text("Trash Bin") }, icon = { Icon(Icons.Default.Delete, null) }, selected = false, onClick = { viewModel.navigateTo(viewModel.trashDirPath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp))
-                    
-                    if (bookmarks.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        HorizontalDivider()
-                        Text("Bookmarks", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-                    }
-                }
+            item {
+                HorizontalDivider()
                 
-                items(bookmarks.toList()) { bmPath ->
-                    val bmFile = File(bmPath)
-                    NavigationDrawerItem(label = { Text(bmFile.name) }, icon = { Icon(painter = androidx.compose.ui.res.painterResource(R.drawable.ic_custom_folder), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(24.dp)) }, selected = false, onClick = { viewModel.navigateTo(bmPath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp))
+                Text("Library", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp))
+                NavigationDrawerItem(label = { Text("Downloads") }, icon = { Icon(Icons.Default.Download, null) }, selected = false, onClick = { viewModel.navigateTo(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
+                NavigationDrawerItem(label = { Text("Images") }, icon = { Icon(Icons.Default.Image, null) }, selected = currentCategory == MediaCategory.IMAGES, onClick = { viewModel.selectCategory(MediaCategory.IMAGES); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
+                NavigationDrawerItem(label = { Text("Videos") }, icon = { Icon(Icons.Default.Movie, null) }, selected = currentCategory == MediaCategory.VIDEOS, onClick = { viewModel.selectCategory(MediaCategory.VIDEOS); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
+                NavigationDrawerItem(label = { Text("Music") }, icon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) }, selected = currentCategory == MediaCategory.MUSIC, onClick = { viewModel.selectCategory(MediaCategory.MUSIC); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
+                NavigationDrawerItem(label = { Text("Documents") }, icon = { Icon(Icons.AutoMirrored.Filled.Article, null) }, selected = false, onClick = { viewModel.navigateTo(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).absolutePath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
+                
+                HorizontalDivider()
+                
+                Text("Tools", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+                NavigationDrawerItem(label = { Text("App Manager") }, icon = { Icon(Icons.Default.Apps, null) }, selected = false, onClick = onOpenAppManager, modifier = Modifier.padding(horizontal = 12.dp))
+                NavigationDrawerItem(label = { Text("Storage Analyzer") }, icon = { Icon(Icons.Default.Analytics, null) }, selected = false, onClick = onOpenAnalyzer, modifier = Modifier.padding(horizontal = 12.dp))
+                NavigationDrawerItem(label = { Text("Media Manager") }, icon = { Icon(Icons.Default.PermMedia, null) }, selected = false, onClick = onOpenMediaManager, modifier = Modifier.padding(horizontal = 12.dp))
+                NavigationDrawerItem(label = { Text("Network Center") }, icon = { Icon(Icons.Default.Public, null) }, selected = false, onClick = onOpenNetworkManager, modifier = Modifier.padding(horizontal = 12.dp))
+                NavigationDrawerItem(label = { Text("Trash Bin") }, icon = { Icon(Icons.Default.Delete, null) }, selected = false, onClick = { viewModel.navigateTo(viewModel.trashDirPath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp))
+                
+                if (bookmarks.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Text("Bookmarks", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
                 }
+            }
+            
+            items(bookmarks.toList()) { bmPath ->
+                val bmFile = File(bmPath)
+                NavigationDrawerItem(label = { Text(bmFile.name) }, icon = { Icon(painter = androidx.compose.ui.res.painterResource(R.drawable.ic_custom_folder), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(24.dp)) }, selected = false, onClick = { viewModel.navigateTo(bmPath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp))
             }
         }
     }
