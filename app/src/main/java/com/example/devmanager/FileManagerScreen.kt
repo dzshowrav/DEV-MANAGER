@@ -14,6 +14,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -87,6 +90,44 @@ fun FileManagerApp(viewModel: FileManagerViewModel) {
         return
     }
 
+    var showStorageAnalyzer by remember { mutableStateOf(false) }
+    var showAppManager by remember { mutableStateOf(false) }
+    var showMediaManager by remember { mutableStateOf(false) }
+    var showNetworkManager by remember { mutableStateOf(false) }
+
+    if (showStorageAnalyzer) {
+        StorageAnalyzerScreen(
+            viewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+            fileViewModel = viewModel,
+            onBack = { showStorageAnalyzer = false }
+        )
+        return
+    }
+
+    if (showAppManager) {
+        AppManagerScreen(
+            viewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+            onBack = { showAppManager = false }
+        )
+        return
+    }
+
+    if (showMediaManager) {
+        MediaManagerScreen(
+            viewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+            onBack = { showMediaManager = false }
+        )
+        return
+    }
+
+    if (showNetworkManager) {
+        NetworkManagerScreen(
+            viewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+            onBack = { showNetworkManager = false }
+        )
+        return
+    }
+
     val imageViewerFile by viewModel.imageViewerFile.collectAsStateWithLifecycle()
     if (imageViewerFile != null) {
         ImageViewerScreen(viewModel, file = imageViewerFile!!)
@@ -107,6 +148,18 @@ fun FileManagerApp(viewModel: FileManagerViewModel) {
         drawerContent = {
             DrawerContent(viewModel, onNavigate = {
                 scope.launch { drawerState.close() }
+            }, onOpenAnalyzer = {
+                scope.launch { drawerState.close() }
+                showStorageAnalyzer = true
+            }, onOpenAppManager = {
+                scope.launch { drawerState.close() }
+                showAppManager = true
+            }, onOpenMediaManager = {
+                scope.launch { drawerState.close() }
+                showMediaManager = true
+            }, onOpenNetworkManager = {
+                scope.launch { drawerState.close() }
+                showNetworkManager = true
             })
         }
     ) {
@@ -128,7 +181,10 @@ fun MainScreen(viewModel: FileManagerViewModel, onOpenDrawer: () -> Unit) {
     val showHiddenFiles by viewModel.showHiddenFiles.collectAsStateWithLifecycle()
     val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
     val storageInfo by viewModel.storageInfo.collectAsStateWithLifecycle()
-    
+
+    val currentCategory by viewModel.currentCategory.collectAsStateWithLifecycle()
+
+    val storageVolumes by viewModel.storageVolumes.collectAsStateWithLifecycle()
     val selectedFiles by viewModel.selectedFiles.collectAsStateWithLifecycle()
     val clipboardFiles by viewModel.clipboardFiles.collectAsStateWithLifecycle()
 
@@ -142,12 +198,14 @@ fun MainScreen(viewModel: FileManagerViewModel, onOpenDrawer: () -> Unit) {
     var showZipDialog by remember { mutableStateOf(false) }
 
     val storageRoot = Environment.getExternalStorageDirectory().absolutePath
-    BackHandler(enabled = currentPath != storageRoot || isSearchActive || selectedFiles.isNotEmpty()) {
+    BackHandler(enabled = currentPath != storageRoot || currentCategory != MediaCategory.NONE || isSearchActive || selectedFiles.isNotEmpty()) {
         if (selectedFiles.isNotEmpty()) {
             viewModel.clearSelection()
         } else if (isSearchActive) {
             isSearchActive = false
             viewModel.setSearchQuery("")
+        } else if (currentCategory != MediaCategory.NONE) {
+            viewModel.selectCategory(MediaCategory.NONE)
         } else {
             viewModel.navigateUp()
         }
@@ -164,9 +222,15 @@ fun MainScreen(viewModel: FileManagerViewModel, onOpenDrawer: () -> Unit) {
                         }
                     },
                     actions = {
-                        IconButton(onClick = { viewModel.copySelected(cut = false) }) { Icon(Icons.Default.ContentCopy, "Copy") }
-                        IconButton(onClick = { viewModel.copySelected(cut = true) }) { Icon(Icons.Default.ContentCut, "Cut") }
-                        IconButton(onClick = { viewModel.deleteFiles() }) { Icon(Icons.Default.Delete, "Delete") }
+                        val isTrash = viewModel.isTrashPath(currentPath)
+                        if (isTrash) {
+                            IconButton(onClick = { viewModel.restoreFromTrash() }) { Icon(Icons.Default.Restore, "Restore") }
+                            IconButton(onClick = { viewModel.deleteFiles() }) { Icon(Icons.Default.DeleteForever, "Delete Permanently") }
+                        } else {
+                            IconButton(onClick = { viewModel.copySelected(cut = false) }) { Icon(Icons.Default.ContentCopy, "Copy") }
+                            IconButton(onClick = { viewModel.copySelected(cut = true) }) { Icon(Icons.Default.ContentCut, "Cut") }
+                            IconButton(onClick = { viewModel.moveToTrash() }) { Icon(Icons.Default.Delete, "Move to Trash") }
+                        }
                         Box {
                             var showBatchMenu by remember { mutableStateOf(false) }
                             IconButton(onClick = { showBatchMenu = true }) { Icon(Icons.Default.MoreVert, "More Options") }
@@ -210,13 +274,36 @@ fun MainScreen(viewModel: FileManagerViewModel, onOpenDrawer: () -> Unit) {
             } else {
                 TopAppBar(
                     title = { 
-                        val parts = currentPath.split("/").filter { it.isNotEmpty() }
-                        Text(parts.lastOrNull() ?: "Storage", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (currentCategory != MediaCategory.NONE) {
+                            Text(
+                                text = when (currentCategory) {
+                                    MediaCategory.IMAGES -> "Images Folders"
+                                    MediaCategory.VIDEOS -> "Videos Folders"
+                                    MediaCategory.MUSIC -> "Music Folders"
+                                    else -> ""
+                                },
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                        } else {
+                            val currentVolume = storageVolumes.find { currentPath.startsWith(it.path) }
+                            val currentRootPath = currentVolume?.path ?: viewModel.storageRoot
+                            val currentRootName = currentVolume?.name ?: "Internal Storage"
+                            
+                            PathBreadcrumbs(
+                                currentPath = currentPath,
+                                storageRoot = currentRootPath,
+                                rootName = currentRootName,
+                                onPathSelect = { viewModel.navigateTo(it) }
+                            )
+                        }
                     },
                     navigationIcon = {
                         IconButton(onClick = onOpenDrawer) { Icon(Icons.Default.Menu, "Menu") }
                     },
                     actions = {
+                        if (viewModel.isTrashPath(currentPath) && files.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.emptyTrash() }) { Icon(Icons.Default.DeleteSweep, "Empty Trash") }
+                        }
                         IconButton(onClick = { isSearchActive = true }) { Icon(Icons.Default.Search, "Search") }
                         IconButton(onClick = { showSortMenu = true }) { Icon(Icons.Default.Sort, "Sort & View") }
                         Box {
@@ -253,7 +340,7 @@ fun MainScreen(viewModel: FileManagerViewModel, onOpenDrawer: () -> Unit) {
                         Icon(Icons.AutoMirrored.Filled.InsertDriveFile, "New File")
                     }
                     SmallFloatingActionButton(onClick = { showCreateDialog = true; isCreateFolder = true; fabExpanded = false }, modifier = Modifier.padding(bottom = 8.dp)) {
-                        Icon(Icons.Default.CreateNewFolder, "New Folder")
+                        Icon(painter = androidx.compose.ui.res.painterResource(R.drawable.ic_custom_folder), contentDescription = "New Folder", tint = Color.Unspecified, modifier = Modifier.size(24.dp))
                     }
                 }
                 if (selectedFiles.isEmpty()) {
@@ -265,87 +352,79 @@ fun MainScreen(viewModel: FileManagerViewModel, onOpenDrawer: () -> Unit) {
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            val storageVolumes by viewModel.storageVolumes.collectAsStateWithLifecycle()
-            val currentVolume = storageVolumes.find { currentPath.startsWith(it.path) }
-            val currentRootPath = currentVolume?.path ?: storageRoot
-            val currentRootName = currentVolume?.name ?: "Internal Storage"
+            val pullRefreshState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
             
-            if (currentPath.equals(currentRootPath, ignoreCase = true) && !isSearchActive) {
-                val used = storageInfo.totalSpace - storageInfo.freeSpace
-                val progress = if (storageInfo.totalSpace > 0) used.toFloat() / storageInfo.totalSpace.toFloat() else 0f
-                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(currentRootName, style = MaterialTheme.typography.titleMedium)
-                        Text("${viewModel.formatSize(used)} / ${viewModel.formatSize(storageInfo.totalSpace)}", style = MaterialTheme.typography.bodySmall)
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)))
+            LaunchedEffect(pullRefreshState.isRefreshing) {
+                if (pullRefreshState.isRefreshing) {
+                    viewModel.loadFiles(currentPath)
+                }
+            }
+            LaunchedEffect(isLoading) {
+                if (isLoading) {
+                    pullRefreshState.startRefresh()
+                } else {
+                    pullRefreshState.endRefresh()
                 }
             }
 
-            PathBreadcrumbs(
-                currentPath = currentPath,
-                storageRoot = currentRootPath,
-                rootName = currentRootName,
-                onPathSelect = { viewModel.navigateTo(it) }
-            )
-            
-            if (isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            } else if (files.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Description, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=0.5f))
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(if (isSearchActive) "No matches found" else "This folder is empty", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            } else {
-                if (viewMode == ViewMode.DETAILED || viewMode == ViewMode.COMPACT) {
-                    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 120.dp)) {
-                        items(files, key = { it.file.absolutePath }) { item ->
-                            val isSelected = selectedFiles.contains(item.file)
-                            val isSelectMode = selectedFiles.isNotEmpty()
-                            FileListItem(
-                                item = item,
-                                isSelected = isSelected,
-                                isSelectMode = isSelectMode,
-                                isCompact = (viewMode == ViewMode.COMPACT),
-                                onClick = {
-                                    if (isSelectMode) viewModel.toggleSelection(item.file)
-                                    else handleFileClick(context, item, viewModel)
-                                },
-                                onLongClick = {
-                                    if (!isSelectMode) viewModel.toggleSelection(item.file)
-                                },
-                                onMoreClick = { fileOptionsSelected = item }
-                            )
+            Box(modifier = Modifier.fillMaxSize().nestedScroll(pullRefreshState.nestedScrollConnection)) {
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                } else if (files.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Description, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=0.5f))
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(if (isSearchActive) "No matches found" else "This folder is empty", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                } else if (viewMode == ViewMode.GRID) {
-                    LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 120.dp, start=8.dp, end=8.dp)) {
-                        items(files, key = { it.file.absolutePath }) { item ->
-                            val isSelected = selectedFiles.contains(item.file)
-                            val isSelectMode = selectedFiles.isNotEmpty()
-                            FileGridItem(
-                                item = item,
-                                isSelected = isSelected,
-                                isSelectMode = isSelectMode,
-                                onClick = {
-                                    if (isSelectMode) viewModel.toggleSelection(item.file)
-                                    else handleFileClick(context, item, viewModel)
-                                },
-                                onLongClick = {
-                                    if (!isSelectMode) viewModel.toggleSelection(item.file)
+                } else {
+                    if (viewMode == ViewMode.DETAILED || viewMode == ViewMode.COMPACT) {
+                            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 120.dp)) {
+                                items(files, key = { it.file.absolutePath }) { item ->
+                                    val isSelected = selectedFiles.contains(item.file)
+                                    val isSelectMode = selectedFiles.isNotEmpty()
+                                    FileListItem(
+                                        item = item,
+                                        isSelected = isSelected,
+                                        isSelectMode = isSelectMode,
+                                        isCompact = (viewMode == ViewMode.COMPACT),
+                                        onClick = {
+                                            if (isSelectMode) viewModel.toggleSelection(item.file)
+                                            else handleFileClick(context, item, viewModel)
+                                        },
+                                        onLongClick = {
+                                            if (!isSelectMode) viewModel.toggleSelection(item.file)
+                                        },
+                                        onMoreClick = { fileOptionsSelected = item }
+                                    )
                                 }
-                            )
+                            }
+                        } else if (viewMode == ViewMode.GRID) {
+                            LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 120.dp, start=8.dp, end=8.dp)) {
+                                items(files, key = { it.file.absolutePath }) { item ->
+                                    val isSelected = selectedFiles.contains(item.file)
+                                    val isSelectMode = selectedFiles.isNotEmpty()
+                                    FileGridItem(
+                                        item = item,
+                                        isSelected = isSelected,
+                                        isSelectMode = isSelectMode,
+                                        onClick = {
+                                            if (isSelectMode) viewModel.toggleSelection(item.file)
+                                            else handleFileClick(context, item, viewModel)
+                                        },
+                                        onLongClick = {
+                                            if (!isSelectMode) viewModel.toggleSelection(item.file)
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-    }
-    
+        
     // Dialogs mapped appropriately
     if (showCreateDialog) {
         var name by remember { mutableStateOf("") }
@@ -526,7 +605,12 @@ fun MainScreen(viewModel: FileManagerViewModel, onOpenDrawer: () -> Unit) {
                 ListItem(headlineContent = { Text("Rename") }, leadingContent = { Icon(Icons.Default.Edit, null) }, modifier = Modifier.clickable { fileToRename = fileOptionsSelected; fileOptionsSelected = null })
                 ListItem(headlineContent = { Text("Share") }, leadingContent = { Icon(Icons.Default.Share, null) }, modifier = Modifier.clickable { shareFile(context, fileOptionsSelected!!.file); fileOptionsSelected = null })
                 ListItem(headlineContent = { Text("Details") }, leadingContent = { Icon(Icons.Default.Info, null) }, modifier = Modifier.clickable { fileDetailsSelected = fileOptionsSelected; fileOptionsSelected = null })
-                ListItem(headlineContent = { Text("Delete", color = MaterialTheme.colorScheme.error) }, leadingContent = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }, modifier = Modifier.clickable { viewModel.deleteFiles(setOf(fileOptionsSelected!!.file)); fileOptionsSelected = null })
+                if (viewModel.isTrashPath(currentPath)) {
+                    ListItem(headlineContent = { Text("Restore") }, leadingContent = { Icon(Icons.Default.Restore, null) }, modifier = Modifier.clickable { viewModel.restoreFromTrash(setOf(fileOptionsSelected!!.file)); fileOptionsSelected = null })
+                    ListItem(headlineContent = { Text("Delete Permanently", color = MaterialTheme.colorScheme.error) }, leadingContent = { Icon(Icons.Default.DeleteForever, null, tint = MaterialTheme.colorScheme.error) }, modifier = Modifier.clickable { viewModel.deleteFiles(setOf(fileOptionsSelected!!.file)); fileOptionsSelected = null })
+                } else {
+                    ListItem(headlineContent = { Text("Move to Trash", color = MaterialTheme.colorScheme.error) }, leadingContent = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }, modifier = Modifier.clickable { viewModel.moveToTrash(setOf(fileOptionsSelected!!.file)); fileOptionsSelected = null })
+                }
             }
         }
     }
@@ -563,42 +647,80 @@ fun SortModeOption(label: String, icon: androidx.compose.ui.graphics.vector.Imag
 }
 
 @Composable
-fun DrawerContent(viewModel: FileManagerViewModel, onNavigate: () -> Unit) {
+fun DrawerContent(viewModel: FileManagerViewModel, onNavigate: () -> Unit, onOpenAnalyzer: () -> Unit = {}, onOpenAppManager: () -> Unit = {}, onOpenMediaManager: () -> Unit = {}, onOpenNetworkManager: () -> Unit = {}) {
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
     val storageVolumes by viewModel.storageVolumes.collectAsStateWithLifecycle()
+    val currentCategory by viewModel.currentCategory.collectAsStateWithLifecycle()
     
     ModalDrawerSheet {
-        Column(modifier = Modifier.padding(vertical = 16.dp)) {
-            Text("DEV MANAGER", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp), color = MaterialTheme.colorScheme.primary)
+        Column(modifier = Modifier.fillMaxHeight().padding(vertical = 16.dp)) {
+            // Header
+            Text("DEV MANAGER", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp), color = MaterialTheme.colorScheme.primary)
             HorizontalDivider()
             
-            Text("Storage", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+            // Pinned Section: Storage and Library
+            Text("Storage", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp))
+            
             storageVolumes.forEach { volume ->
                 val icon = if (volume.isRemovable) Icons.Default.SdCard else Icons.Default.Storage
                 NavigationDrawerItem(
-                    label = { Text(volume.name) },
+                    label = { 
+                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                            Text(volume.name, style = MaterialTheme.typography.labelLarge)
+                            if (volume.totalSpace > 0) {
+                                val used = volume.totalSpace - volume.freeSpace
+                                val progress = used.toFloat() / volume.totalSpace.toFloat()
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(viewModel.formatSize(used), style = MaterialTheme.typography.labelSmall)
+                                    Text(viewModel.formatSize(volume.totalSpace), style = MaterialTheme.typography.labelSmall)
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                LinearProgressIndicator(
+                                    progress = { progress }, 
+                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp))
+                                )
+                            }
+                        }
+                    },
                     icon = { Icon(icon, null) },
                     selected = false,
                     onClick = { viewModel.navigateTo(volume.path); onNavigate() },
-                    modifier = Modifier.padding(horizontal = 12.dp)
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
                 )
             }
             
             HorizontalDivider()
-            Text("Library", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-            NavigationDrawerItem(label = { Text("Downloads") }, icon = { Icon(Icons.Default.Download, null) }, selected = false, onClick = { viewModel.navigateTo(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp))
-            NavigationDrawerItem(label = { Text("Images") }, icon = { Icon(Icons.Default.Image, null) }, selected = false, onClick = { viewModel.navigateTo(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).absolutePath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp))
-            NavigationDrawerItem(label = { Text("Videos") }, icon = { Icon(Icons.Default.Movie, null) }, selected = false, onClick = { viewModel.navigateTo(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES).absolutePath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp))
-            NavigationDrawerItem(label = { Text("Music") }, icon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) }, selected = false, onClick = { viewModel.navigateTo(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC).absolutePath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp))
-            NavigationDrawerItem(label = { Text("Documents") }, icon = { Icon(Icons.AutoMirrored.Filled.Article, null) }, selected = false, onClick = { viewModel.navigateTo(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).absolutePath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp))
             
-            if (bookmarks.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider()
-                Text("Bookmarks", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-                bookmarks.forEach { bmPath ->
+            Text("Library", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp))
+            NavigationDrawerItem(label = { Text("Downloads") }, icon = { Icon(Icons.Default.Download, null) }, selected = false, onClick = { viewModel.navigateTo(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
+            NavigationDrawerItem(label = { Text("Images") }, icon = { Icon(Icons.Default.Image, null) }, selected = currentCategory == MediaCategory.IMAGES, onClick = { viewModel.selectCategory(MediaCategory.IMAGES); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
+            NavigationDrawerItem(label = { Text("Videos") }, icon = { Icon(Icons.Default.Movie, null) }, selected = currentCategory == MediaCategory.VIDEOS, onClick = { viewModel.selectCategory(MediaCategory.VIDEOS); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
+            NavigationDrawerItem(label = { Text("Music") }, icon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) }, selected = currentCategory == MediaCategory.MUSIC, onClick = { viewModel.selectCategory(MediaCategory.MUSIC); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
+            NavigationDrawerItem(label = { Text("Documents") }, icon = { Icon(Icons.AutoMirrored.Filled.Article, null) }, selected = false, onClick = { viewModel.navigateTo(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).absolutePath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
+            
+            HorizontalDivider()
+            
+            // Scrollable Tools and Bookmarks content
+            LazyColumn(modifier = Modifier.weight(1f)) {
+                item {
+                    Text("Tools", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+                    NavigationDrawerItem(label = { Text("App Manager") }, icon = { Icon(Icons.Default.Apps, null) }, selected = false, onClick = onOpenAppManager, modifier = Modifier.padding(horizontal = 12.dp))
+                    NavigationDrawerItem(label = { Text("Storage Analyzer") }, icon = { Icon(Icons.Default.Analytics, null) }, selected = false, onClick = onOpenAnalyzer, modifier = Modifier.padding(horizontal = 12.dp))
+                    NavigationDrawerItem(label = { Text("Media Manager") }, icon = { Icon(Icons.Default.PermMedia, null) }, selected = false, onClick = onOpenMediaManager, modifier = Modifier.padding(horizontal = 12.dp))
+                    NavigationDrawerItem(label = { Text("Network Center") }, icon = { Icon(Icons.Default.Public, null) }, selected = false, onClick = onOpenNetworkManager, modifier = Modifier.padding(horizontal = 12.dp))
+                    NavigationDrawerItem(label = { Text("Trash Bin") }, icon = { Icon(Icons.Default.Delete, null) }, selected = false, onClick = { viewModel.navigateTo(viewModel.trashDirPath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp))
+                    
+                    if (bookmarks.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider()
+                        Text("Bookmarks", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+                    }
+                }
+                
+                items(bookmarks.toList()) { bmPath ->
                     val bmFile = File(bmPath)
-                    NavigationDrawerItem(label = { Text(bmFile.name) }, icon = { Icon(Icons.Default.FolderSpecial, null) }, selected = false, onClick = { viewModel.navigateTo(bmPath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp))
+                    NavigationDrawerItem(label = { Text(bmFile.name) }, icon = { Icon(painter = androidx.compose.ui.res.painterResource(R.drawable.ic_custom_folder), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(24.dp)) }, selected = false, onClick = { viewModel.navigateTo(bmPath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp))
                 }
             }
         }
@@ -649,6 +771,30 @@ fun handleFileClick(context: android.content.Context, item: FileItem, viewModel:
             viewModel.openImageViewer(item.file)
         } else if (extension in listOf("txt", "log", "md", "csv", "json")) {
             viewModel.openTextEditor(item.file)
+        } else if (extension == "apk") {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    if (!context.packageManager.canRequestPackageInstalls()) {
+                        val i = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                            data = Uri.parse("package:${context.packageName}")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(i)
+                        android.widget.Toast.makeText(context, "Grant unknown source installation permission and try again", android.widget.Toast.LENGTH_LONG).show()
+                        return
+                    }
+                }
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", item.file)
+                val i = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(i)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                android.widget.Toast.makeText(context, "Failed to start APK installer : ${e.localizedMessage}", android.widget.Toast.LENGTH_SHORT).show()
+            }
         } else {
             try {
                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", item.file)
@@ -705,7 +851,7 @@ fun PermissionScreen(onRequestPermission: () -> Unit) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(Icons.Default.FolderSpecial, contentDescription = null, modifier = Modifier.size(72.dp), tint = MaterialTheme.colorScheme.primary)
+            Icon(painter = androidx.compose.ui.res.painterResource(R.drawable.ic_custom_folder), contentDescription = null, modifier = Modifier.size(72.dp), tint = Color.Unspecified)
             Spacer(modifier = Modifier.height(24.dp))
             Text("Storage Access Required", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
@@ -722,10 +868,21 @@ fun PathBreadcrumbs(currentPath: String, storageRoot: String, rootName: String, 
     if (relPath.startsWith("/")) relPath = relPath.substring(1)
     val parts = if (relPath.isEmpty()) emptyList() else relPath.split("/")
     
-    LazyRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(parts.size) {
+        if (parts.isNotEmpty() || listState.firstVisibleItemIndex > 0) {
+            listState.animateScrollToItem(parts.size)
+        }
+    }
+
+    LazyRow(
+        state = listState,
+        modifier = Modifier.fillMaxWidth().padding(end = 4.dp), 
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         item { BreadcrumbItem(rootName, onClick = { onPathSelect(storageRoot) }) }
         items(parts.size) { index ->
-            Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             val subPath = storageRoot + "/" + parts.take(index + 1).joinToString("/")
             BreadcrumbItem(parts[index], onClick = { onPathSelect(subPath) })
         }
@@ -735,7 +892,7 @@ fun PathBreadcrumbs(currentPath: String, storageRoot: String, rootName: String, 
 @Composable
 fun BreadcrumbItem(label: String, onClick: () -> Unit) {
     Surface(onClick = onClick, shape = RoundedCornerShape(8.dp), color = Color.Transparent) {
-        Text(text = label, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+        Text(text = label, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -758,29 +915,46 @@ fun FileListItem(item: FileItem, isSelected: Boolean, isSelectMode: Boolean, isC
         
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = item.name, 
-                style = if (isCompact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge, 
-                fontWeight = FontWeight.Medium, 
-                maxLines = 1, 
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (!item.isDirectory || item.sizeLabel != "0 items") {
-                        Text(text = item.sizeLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "•", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-                    if (!item.isDirectory && item.extension.isNotBlank() && !isCompact) {
-                        Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(4.dp)) {
-                            Text(text = item.extension.uppercase(), modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 9.sp)
-                        }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = item.name, 
+                    style = if (isCompact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge, 
+                    fontWeight = FontWeight.Medium, 
+                    maxLines = 1, 
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (isCompact && !item.isDirectory && item.extension.isNotBlank()) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(4.dp)) {
+                        Text(text = item.extension.uppercase(), modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 9.sp)
                     }
                 }
-                Text(text = item.lastModifiedLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (!isCompact) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (!item.isDirectory || item.sizeLabel != "0 items") {
+                            Text(text = item.sizeLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = "•", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        if (!item.isDirectory && item.extension.isNotBlank()) {
+                            Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(4.dp)) {
+                                Text(text = item.extension.uppercase(), modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 9.sp)
+                            }
+                        }
+                        if (item.resolution != null) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(4.dp)) {
+                                Text(text = item.resolution, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer, fontSize = 9.sp)
+                            }
+                        }
+                    }
+                    Text(text = item.lastModifiedLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
+                }
             }
         }
         if (!isSelectMode) {
@@ -824,47 +998,86 @@ fun FileIconBox(item: FileItem, size: androidx.compose.ui.unit.Dp, iconSize: and
         )
     } else {
         Box(
-            modifier = Modifier.size(size).clip(CircleShape).background(if (item.isDirectory) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer),
+            modifier = Modifier.size(size).clip(CircleShape).background(if (item.isDirectory) Color.Transparent else MaterialTheme.colorScheme.secondaryContainer),
             contentAlignment = Alignment.Center
         ) {
-            Icon(imageVector = getFileIcon(item), contentDescription = null, tint = if (item.isDirectory) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(iconSize))
+            if (item.isDirectory) {
+                Icon(
+                    painter = androidx.compose.ui.res.painterResource(R.drawable.ic_custom_folder),
+                    contentDescription = null,
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(size)
+                )
+            } else {
+                Icon(
+                    imageVector = getFileIcon(item), 
+                    contentDescription = null, 
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer, 
+                    modifier = Modifier.size(iconSize)
+                )
+            }
         }
     }
 }
 
-fun getFileIcon(item: FileItem) = if (item.isDirectory) {
-    Icons.Default.Folder
-} else {
-    when (item.extension) {
-        "mp4", "mkv", "avi", "mov", "webm", "flv" -> Icons.Default.VideoLibrary
-        "mp3", "wav", "m4a", "flac", "ogg", "aac" -> Icons.Default.AudioFile
-        "pdf" -> Icons.Default.PictureAsPdf
-        "zip", "rar", "7z", "tar", "gz" -> Icons.Default.FolderZip
-        "doc", "docx", "txt", "rtf", "md", "csv", "log" -> Icons.Default.Description
-        "apk" -> Icons.Default.Android
-        else -> Icons.AutoMirrored.Filled.InsertDriveFile
-    }
+fun getFileIcon(item: FileItem) = when (item.extension) {
+    "mp4", "mkv", "avi", "mov", "webm", "flv" -> Icons.Default.VideoLibrary
+    "mp3", "wav", "m4a", "flac", "ogg", "aac" -> Icons.Default.AudioFile
+    "pdf" -> Icons.Default.PictureAsPdf
+    "zip", "rar", "7z", "tar", "gz" -> Icons.Default.FolderZip
+    "doc", "docx", "txt", "rtf", "md", "csv", "log" -> Icons.Default.Description
+    "apk" -> Icons.Default.Android
+    else -> Icons.AutoMirrored.Filled.InsertDriveFile
 }
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MediaPlayerScreen(viewModel: FileManagerViewModel, file: File) {
     val context = LocalContext.current
-    val exoPlayer = remember {
-        androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
-            val mediaItem = androidx.media3.common.MediaItem.fromUri(Uri.fromFile(file))
-            setMediaItem(mediaItem)
+    var exoPlayer by remember { mutableStateOf<androidx.media3.exoplayer.ExoPlayer?>(null) }
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+
+    DisposableEffect(file.absolutePath) {
+        val player = androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
+            val audioAttributes = androidx.media3.common.AudioAttributes.Builder()
+                .setUsage(androidx.media3.common.C.USAGE_MEDIA)
+                .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MUSIC)
+                .build()
+            setAudioAttributes(audioAttributes, true)
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(Uri.fromFile(file)))
             prepare()
-            playWhenReady = true
+            play()
         }
-    }
-    
-    DisposableEffect(Unit) {
+        exoPlayer = player
+
         onDispose {
-            exoPlayer.release()
+            player.stop()
+            player.release()
+            if (exoPlayer == player) {
+                exoPlayer = null
+            }
         }
     }
-    
+
+    DisposableEffect(lifecycleOwner, exoPlayer) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> {
+                    exoPlayer?.pause()
+                }
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
+                    exoPlayer?.play()
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     BackHandler {
         viewModel.closeMediaPlayer()
     }
@@ -872,29 +1085,49 @@ fun MediaPlayerScreen(viewModel: FileManagerViewModel, file: File) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = { viewModel.closeMediaPlayer() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f))
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black.copy(alpha = 0.5f))
             )
         },
         containerColor = Color.Black
     ) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-            androidx.compose.ui.viewinterop.AndroidView(
-                factory = { ctx ->
-                    androidx.media3.ui.PlayerView(ctx).apply {
-                        player = exoPlayer
-                        useController = true
-                        setShowNextButton(false)
-                        setShowPreviousButton(false)
-                    }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            if (exoPlayer != null) {
+                androidx.compose.ui.viewinterop.AndroidView(
+                    factory = { ctx ->
+                        androidx.media3.ui.PlayerView(ctx).apply {
+                            layoutParams = android.view.ViewGroup.LayoutParams(
+                                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                            useController = true
+                            setShowNextButton(false)
+                            setShowPreviousButton(false)
+                            setShowFastForwardButton(true)
+                            setShowRewindButton(true)
+                            controllerShowTimeoutMs = 3000
+                            setShowBuffering(androidx.media3.ui.PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                        }
+                    },
+                    update = { view ->
+                        view.player = exoPlayer
+                    },
+                    onRelease = { view ->
+                        view.player = null
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                CircularProgressIndicator(color = Color.White)
+            }
+            // A click layer to allow toggling top app bar? PlayerView already does this.
+            // Just applying padding overlay on top
+            Box(Modifier.fillMaxWidth().height(paddingValues.calculateTopPadding()))
         }
     }
 }

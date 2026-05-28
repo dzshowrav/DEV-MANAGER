@@ -25,6 +25,8 @@ import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 
 data class FileItem(
     val file: File,
@@ -34,8 +36,34 @@ data class FileItem(
     val size: Long,
     val lastModified: Long,
     val lastModifiedLabel: String,
-    val extension: String
+    val extension: String,
+    val resolution: String? = null
 )
+
+fun getMediaResolution(file: File, extension: String): String? {
+    try {
+        if (extension in listOf("jpg", "jpeg", "png", "gif", "bmp", "webp")) {
+            val options = BitmapFactory.Options()
+            options.inJustDecodeBounds = true
+            BitmapFactory.decodeFile(file.absolutePath, options)
+            if (options.outWidth > 0 && options.outHeight > 0) {
+                return "${options.outWidth} x ${options.outHeight}"
+            }
+        } else if (extension in listOf("mp4", "mkv", "avi", "mov", "webm")) {
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(file.absolutePath)
+            val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+            val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+            retriever.release()
+            if (width != null && height != null) {
+                return "$width x $height"
+            }
+        }
+    } catch (e: Exception) {
+        // Ignore
+    }
+    return null
+}
 
 enum class SortType { NAME, SIZE, DATE, TYPE }
 enum class ViewMode { DETAILED, COMPACT, GRID }
@@ -46,8 +74,12 @@ data class StorageVolumeInfo(
     val name: String,
     val path: String,
     val isPrimary: Boolean,
-    val isRemovable: Boolean
+    val isRemovable: Boolean,
+    val totalSpace: Long = 0L,
+    val freeSpace: Long = 0L
 )
+
+enum class MediaCategory { NONE, IMAGES, VIDEOS, MUSIC }
 
 class FileManagerViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -57,6 +89,9 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _currentPath = MutableStateFlow(storageRoot)
     val currentPath: StateFlow<String> = _currentPath.asStateFlow()
+
+    private val _currentCategory = MutableStateFlow(MediaCategory.NONE)
+    val currentCategory: StateFlow<MediaCategory> = _currentCategory.asStateFlow()
 
     private val _allFiles = MutableStateFlow<List<FileItem>>(emptyList())
     private val _files = MutableStateFlow<List<FileItem>>(emptyList())
@@ -176,7 +211,19 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                 }
             }
-            _storageVolumes.value = volumes.distinctBy { it.path }
+            val finalVolumes = volumes.distinctBy { it.path }.map {
+                var total = 0L
+                var free = 0L
+                try {
+                    val stat = android.os.StatFs(it.path)
+                    total = stat.totalBytes
+                    free = stat.availableBytes
+                } catch (e: Exception) {
+                    // Ignore
+                }
+                it.copy(totalSpace = total, freeSpace = free)
+            }
+            _storageVolumes.value = finalVolumes
         } catch (e: Exception) {
             e.printStackTrace()
             _storageVolumes.value = listOf(StorageVolumeInfo("Internal Storage", storageRoot, true, false))
@@ -205,6 +252,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
     fun navigateTo(path: String) {
         val file = File(path)
         if (file.exists() && file.isDirectory) {
+            _currentCategory.value = MediaCategory.NONE
             _currentPath.value = file.absolutePath
             _searchQuery.value = ""
             _selectedFiles.value = emptySet()
@@ -225,9 +273,20 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    val trashDirPath: String get() = trashDir.absolutePath
+
+    private fun getTrashOriginalName(trashName: String): String {
+        return trashName.substringAfter("_", trashName)
+    }
+
     fun loadFiles(path: String) {
+        if (_currentCategory.value != MediaCategory.NONE) {
+            selectCategory(_currentCategory.value)
+            return
+        }
         viewModelScope.launch {
             _isLoading.value = true
+            val isTrash = isTrashPath(path)
             val newFiles = withContext(Dispatchers.IO) {
                 try {
                     val dir = File(path)
@@ -251,13 +310,14 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
                                 }
                                 FileItem(
                                     file = file,
-                                    name = file.name,
+                                    name = if (isTrash) getTrashOriginalName(file.name) else file.name,
                                     isDirectory = file.isDirectory,
                                     sizeLabel = sizeLabel,
                                     size = file.length(),
                                     lastModified = file.lastModified(),
                                     lastModifiedLabel = try { dateFormat.format(Date(file.lastModified())) } catch (e: Exception) { "" },
-                                    extension = file.extension.lowercase()
+                                    extension = file.extension.lowercase(),
+                                    resolution = getMediaResolution(file, file.extension.lowercase())
                                 )
                             } catch (e: Exception) {
                                 null
@@ -383,6 +443,88 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
             }
             if (_isCut.value) _clipboardFiles.value = emptyList()
             loadFiles(currentDestPath)
+            updateStorageInfo()
+        }
+    }
+
+    private val trashDir by lazy { 
+        val dir = File(storageRoot, ".dzdev_trash")
+        if (!dir.exists()) dir.mkdirs()
+        dir
+    }
+    
+    // Original paths for trash
+    private val trashPaths: MutableMap<String, String> by lazy {
+        val map = mutableMapOf<String, String>()
+        val json = sharedPrefs.getString("trash_paths", "{}")
+        try {
+            val arr = org.json.JSONObject(json)
+            arr.keys().forEach {
+                map[it] = arr.getString(it)
+            }
+        } catch(e: Exception) {}
+        map
+    }
+
+    private fun saveTrashPaths() {
+        val json = org.json.JSONObject(trashPaths as Map<*, *>).toString()
+        sharedPrefs.edit().putString("trash_paths", json).apply()
+    }
+
+    fun isTrashPath(path: String) = path == trashDir.absolutePath
+
+    fun moveToTrash(targets: Set<File> = _selectedFiles.value) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            withContext(Dispatchers.IO) {
+                targets.forEach { file ->
+                    val trashName = "${System.currentTimeMillis()}_${file.name}"
+                    val dest = File(trashDir, trashName)
+                    try {
+                        if (file.renameTo(dest)) {
+                            trashPaths[trashName] = file.absolutePath
+                        }
+                    } catch(e: Exception) {}
+                }
+                saveTrashPaths()
+            }
+            clearSelection()
+            loadFiles(_currentPath.value)
+            updateStorageInfo()
+        }
+    }
+
+    fun restoreFromTrash(targets: Set<File> = _selectedFiles.value) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            withContext(Dispatchers.IO) {
+                targets.forEach { file ->
+                    val originalPath = trashPaths[file.name]
+                    if (originalPath != null) {
+                        try {
+                            if (file.renameTo(File(originalPath))) {
+                                trashPaths.remove(file.name)
+                            }
+                        } catch(e: Exception) {}
+                    }
+                }
+                saveTrashPaths()
+            }
+            clearSelection()
+            loadFiles(_currentPath.value)
+            updateStorageInfo()
+        }
+    }
+
+    fun emptyTrash() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            withContext(Dispatchers.IO) {
+                trashDir.listFiles()?.forEach { it.deleteRecursively() }
+                trashPaths.clear()
+                saveTrashPaths()
+            }
+            loadFiles(_currentPath.value)
             updateStorageInfo()
         }
     }
@@ -619,6 +761,104 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
     fun closeTextEditor() {
         _textEditorFile.value = null
         _textEditorContent.value = ""
+    }
+
+    fun selectCategory(category: MediaCategory) {
+        _currentCategory.value = category
+        if (category == MediaCategory.NONE) {
+            navigateTo(storageRoot)
+        } else {
+            viewModelScope.launch {
+                _isLoading.value = true
+                _searchQuery.value = ""
+                _selectedFiles.value = emptySet()
+                
+                val folders = scanMediaFolders(category)
+                _allFiles.value = folders
+                applyFilters()
+                _isLoading.value = false
+            }
+        }
+    }
+
+    suspend fun scanMediaFolders(category: MediaCategory): List<FileItem> = withContext(Dispatchers.IO) {
+        if (category == MediaCategory.NONE) return@withContext emptyList()
+        
+        val matchedFolders = mutableSetOf<File>()
+        val extensions = when (category) {
+            MediaCategory.IMAGES -> listOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif")
+            MediaCategory.VIDEOS -> listOf("mp4", "mkv", "avi", "mov", "webm", "3gp", "m4v")
+            MediaCategory.MUSIC -> listOf("mp3", "wav", "ogg", "m4a", "flac", "aac", "wma", "amr", "ape", "mid")
+            else -> return@withContext emptyList()
+        }
+
+        val volumes = _storageVolumes.value.ifEmpty {
+            listOf(StorageVolumeInfo("Internal Storage", storageRoot, true, false))
+        }
+
+        for (volume in volumes) {
+            val root = File(volume.path)
+            if (!root.exists() || !root.isDirectory) continue
+            
+            try {
+                root.walkTopDown()
+                    .onEnter { dir ->
+                        val name = dir.name
+                        if (name.startsWith(".")) return@onEnter false
+                        if (name.equals("Android", ignoreCase = true)) return@onEnter false
+                        true
+                    }
+                    .forEach { file ->
+                        if (file.isDirectory) {
+                            try {
+                                val filesInDir = file.listFiles()
+                                if (filesInDir != null) {
+                                    val hasMedia = filesInDir.any { child ->
+                                        child.isFile && child.extension.lowercase() in extensions && !child.name.startsWith(".")
+                                    }
+                                    if (hasMedia) {
+                                        matchedFolders.add(file)
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                // skip permission denied or other exceptions
+                            }
+                        }
+                    }
+            } catch (e: Exception) {
+                // Ignore traverse error
+            }
+        }
+
+        matchedFolders.mapNotNull { folder ->
+            try {
+                val filesInDir = folder.listFiles() ?: emptyArray()
+                val mediaCount = filesInDir.count { child ->
+                    child.isFile && child.extension.lowercase() in extensions && !child.name.startsWith(".")
+                }
+                if (mediaCount == 0) return@mapNotNull null
+                
+                val itemLabel = when (category) {
+                    MediaCategory.IMAGES -> "$mediaCount image" + if (mediaCount > 1) "s" else ""
+                    MediaCategory.VIDEOS -> "$mediaCount video" + if (mediaCount > 1) "s" else ""
+                    MediaCategory.MUSIC -> "$mediaCount audio file" + if (mediaCount > 1) "s" else ""
+                    else -> "$mediaCount items"
+                }
+                
+                FileItem(
+                    file = folder,
+                    name = folder.name,
+                    isDirectory = true,
+                    sizeLabel = itemLabel,
+                    size = 0L,
+                    lastModified = folder.lastModified(),
+                    lastModifiedLabel = try { dateFormat.format(Date(folder.lastModified())) } catch (e: Exception) { "" },
+                    extension = "folder"
+                )
+            } catch (e: Exception) {
+                null
+            }
+        }.sortedBy { it.name.lowercase() }
     }
 
     fun formatSize(size: Long): String {

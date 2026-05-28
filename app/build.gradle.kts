@@ -55,4 +55,6 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("androidx.media3:media3-exoplayer:1.2.1")
     implementation("androidx.media3:media3-ui:1.2.1")
+    implementation("commons-net:commons-net:3.10.0")
+    implementation("com.github.mwiede:jsch:0.2.16")
 }
