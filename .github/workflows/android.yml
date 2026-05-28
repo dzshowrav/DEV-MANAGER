@@ -7,6 +7,9 @@ on:
     branches: [ "master", "main" ]
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,22 +24,22 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
+    - name: Regenerate Gradle Wrapper
+      run: |
+        # Install the official Gradle to regenerate a trusted wrapper jar
+        curl -s https://services.gradle.org/distributions/gradle-9.3.1-bin.zip -o gradle.zip
+        unzip -q gradle.zip -d /opt/gradle
+        export PATH=$PATH:/opt/gradle/gradle-9.3.1/bin
+        gradle wrapper --gradle-version 9.3.1 --distribution-type bin
+
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
 
     - name: Grant Execute Permission to Gradlew
-      run: |
-        if [ -f "./gradlew" ]; then
-          chmod +x gradlew
-        fi
+      run: chmod +x gradlew
 
     - name: Build APKs (Debug and Release)
-      run: |
-        if [ -f "./gradlew" ]; then
-          ./gradlew assembleDebug assembleRelease
-        else
-          gradle assembleDebug assembleRelease
-        fi
+      run: ./gradlew assembleDebug assembleRelease
 
     - name: Upload Build Artifacts
       uses: actions/upload-artifact@v4
