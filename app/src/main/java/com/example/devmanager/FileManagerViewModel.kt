@@ -49,15 +49,6 @@ fun getMediaResolution(file: File, extension: String): String? {
             if (options.outWidth > 0 && options.outHeight > 0) {
                 return "${options.outWidth} x ${options.outHeight}"
             }
-        } else if (extension in listOf("mp4", "mkv", "avi", "mov", "webm")) {
-            val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(file.absolutePath)
-            val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
-            val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
-            retriever.release()
-            if (width != null && height != null) {
-                return "$width x $height"
-            }
         }
     } catch (e: Exception) {
         // Ignore
