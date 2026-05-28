@@ -23,11 +23,8 @@ jobs:
 
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
-<<<<<<< HEAD
-=======
       with:
-        validate-wrappers: false
->>>>>>> b03f087 (release apk version 1.5.2)
+        gradle-version: '8.7'
 
     - name: Grant Execute Permission to Gradlew
       run: |
@@ -35,18 +32,16 @@ jobs:
           chmod +x gradlew
         fi
 
-    - name: Build APKs (Debug and Release)
+    - name: Build Release APK
       run: |
         if [ -f "./gradlew" ]; then
-          ./gradlew assembleDebug assembleRelease
+          ./gradlew assembleRelease
         else
-          gradle assembleDebug assembleRelease
+          gradle assembleRelease
         fi
 
-    - name: Upload Build Artifacts
+    - name: Upload Release APK
       uses: actions/upload-artifact@v4
       with:
-        name: DevManager-APKs
-        path: |
-          app/build/outputs/apk/debug/*.apk
-          app/build/outputs/apk/release/*.apk
+        name: devmanager-release-apk
+        path: app/build/outputs/apk/release/*.apk
