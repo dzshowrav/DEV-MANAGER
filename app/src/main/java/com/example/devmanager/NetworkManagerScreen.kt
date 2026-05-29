@@ -38,6 +38,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.text.style.TextAlign
 import java.util.Locale
 import java.util.UUID
+import androidx.activity.compose.BackHandler
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,6 +70,27 @@ fun NetworkManagerScreen(
     // Media stream state
     var streamingVideoFile by remember { mutableStateOf<RemoteFile?>(null) }
     var streamingAudioFile by remember { mutableStateOf<RemoteFile?>(null) }
+
+    BackHandler {
+        if (streamingVideoFile != null) {
+            streamingVideoFile = null
+        } else if (streamingAudioFile != null) {
+            streamingAudioFile = null
+        } else if (editingFileState != null) {
+            editingFileState = null
+            fileContentState = ""
+        } else if (connectedProfile != null) {
+            if (currentRemotePath != "/" && currentRemotePath.isNotEmpty()) {
+                val parent = currentRemotePath.substringBeforeLast("/")
+                val resolvedParent = if (parent.isEmpty()) "/" else parent
+                viewModel.loadRemoteFiles(resolvedParent)
+            } else {
+                viewModel.disconnect()
+            }
+        } else {
+            onBack()
+        }
+    }
 
     // Toast Collector
     LaunchedEffect(Unit) {

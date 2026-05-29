@@ -45,6 +45,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.activity.compose.BackHandler
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,6 +74,18 @@ fun MediaManagerScreen(
     var showMetadataItem by remember { mutableStateOf<MediaItem?>(null) }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var activePlaylistDetails by remember { mutableStateOf<Playlist?>(null) }
+
+    BackHandler {
+        if (activeImageIndex != null) {
+            activeImageIndex = null
+        } else if (activeAlbumName != null) {
+            activeAlbumName = null
+        } else if (activePlaylistDetails != null) {
+            activePlaylistDetails = null
+        } else {
+            onBack()
+        }
+    }
 
     // Toast Collector
     LaunchedEffect(Unit) {

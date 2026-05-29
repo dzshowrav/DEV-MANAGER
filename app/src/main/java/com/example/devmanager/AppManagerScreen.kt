@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.activity.compose.BackHandler
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +56,17 @@ fun AppManagerScreen(
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     var activeAppDetails by remember { mutableStateOf<AppInfo?>(null) }
     var inSelectionMode by remember { mutableStateOf(false) }
+    
+    BackHandler {
+        if (inSelectionMode) {
+            inSelectionMode = false
+            viewModel.clearSelection()
+        } else if (activeAppDetails != null) {
+            activeAppDetails = null
+        } else {
+            onBack()
+        }
+    }
 
     var launcherRef: androidx.activity.result.ActivityResultLauncher<Intent>? by remember { mutableStateOf(null) }
 

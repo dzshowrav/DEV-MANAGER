@@ -21,6 +21,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.activity.compose.BackHandler
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,6 +30,7 @@ fun StorageAnalyzerScreen(
     fileViewModel: FileManagerViewModel,
     onBack: () -> Unit
 ) {
+    BackHandler { onBack() }
     val isAnalyzing by viewModel.isAnalyzing.collectAsStateWithLifecycle()
     val result by viewModel.result.collectAsStateWithLifecycle()
     val scanProgress by viewModel.scanProgress.collectAsStateWithLifecycle()
