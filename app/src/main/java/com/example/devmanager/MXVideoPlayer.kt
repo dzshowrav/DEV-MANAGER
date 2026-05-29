@@ -30,6 +30,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -48,11 +53,14 @@ fun MXPlayerDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
+    var lastSavedPos by rememberSaveable { mutableLongStateOf(0L) }
     
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(Uri.parse(mediaPath)))
+            if (lastSavedPos > 0L) {
+                seekTo(lastSavedPos)
+            }
             prepare()
             playWhenReady = true
         }
@@ -72,11 +80,36 @@ fun MXPlayerDialog(
             usePlatformDefaultWidth = false
         )
     ) {
+        val view = LocalView.current
+        val dialogWindow = remember(view) {
+            var parent = view.parent
+            while (parent != null && parent !is androidx.compose.ui.window.DialogWindowProvider) {
+                parent = parent.parent
+            }
+            (parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+        }
+
+        LaunchedEffect(dialogWindow) {
+            dialogWindow?.let { window ->
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+                window.setFlags(
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                )
+            }
+        }
+
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = Color.Black
         ) {
-            MXPlayerContent(exoPlayer, title, onDismiss)
+            MXPlayerContent(
+                exoPlayer = exoPlayer,
+                title = title,
+                onDismiss = onDismiss,
+                onPositionChange = { lastSavedPos = it },
+                dialogWindow = dialogWindow
+            )
         }
     }
 }
@@ -86,10 +119,12 @@ fun MXPlayerDialog(
 fun MXPlayerContent(
     exoPlayer: ExoPlayer,
     title: String,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onPositionChange: (Long) -> Unit,
+    dialogWindow: android.view.Window?
 ) {
     val context = LocalContext.current
-    val window = (context as? Activity)?.window
+    val window = dialogWindow ?: (context as? Activity)?.window
     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     
     var showControls by remember { mutableStateOf(true) }
@@ -123,9 +158,10 @@ fun MXPlayerContent(
         while (true) {
             if (!isSeeking) {
                 currentPosition = exoPlayer.currentPosition
+                onPositionChange(currentPosition)
             }
             duration = exoPlayer.duration.coerceAtLeast(0L)
-            delay(500)
+            delay(250)
         }
     }
 
@@ -134,6 +170,30 @@ fun MXPlayerContent(
         if (showControls && isPlaying) {
             delay(3000)
             showControls = false
+        }
+    }
+
+    // Toggle system bars based on controls visibility
+    val view = LocalView.current
+    LaunchedEffect(showControls, window) {
+        window?.let { w ->
+            val insetsController = WindowCompat.getInsetsController(w, view)
+            insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            if (showControls) {
+                insetsController.show(WindowInsetsCompat.Type.systemBars())
+            } else {
+                insetsController.hide(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            // Restore activity system bars when player is fully exited
+            (context as? Activity)?.window?.let { w ->
+                val insetsController = WindowCompat.getInsetsController(w, view)
+                insetsController.show(WindowInsetsCompat.Type.systemBars())
+            }
         }
     }
 
@@ -298,12 +358,24 @@ fun MXPlayerContent(
             exit = fadeOut(),
             modifier = Modifier.fillMaxSize()
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = { showControls = false }
+                        )
+                    }
+            ) {
                 // Top Bar
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Color.Black.copy(alpha = 0.5f))
+                        .pointerInput(Unit) {
+                            detectTapGestures { /* consume tap */ }
+                        }
+                        .statusBarsPadding()
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -347,6 +419,10 @@ fun MXPlayerContent(
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .background(Color.Black.copy(alpha = 0.5f))
+                        .pointerInput(Unit) {
+                            detectTapGestures { /* consume tap */ }
+                        }
+                        .navigationBarsPadding()
                         .padding(16.dp)
                 ) {
                     Row(
