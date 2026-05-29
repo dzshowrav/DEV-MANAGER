@@ -3,8 +3,10 @@ package com.example.devmanager
 import android.app.Activity
 import android.content.Context
 import android.media.AudioManager
+import android.media.PlaybackParams
 import android.net.Uri
 import android.view.WindowManager
+import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
@@ -12,10 +14,14 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Subtitles
+import androidx.compose.material.icons.outlined.Audiotrack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,24 +31,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 @OptIn(UnstableApi::class)
@@ -53,7 +55,7 @@ fun MXPlayerDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    var lastSavedPos by rememberSaveable { mutableLongStateOf(0L) }
+    var lastSavedPos by remember { mutableLongStateOf(0L) }
     
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
@@ -72,45 +74,36 @@ fun MXPlayerDialog(
         }
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = false,
-            usePlatformDefaultWidth = false
-        )
+    // Capture hardware back button
+    BackHandler(onBack = {
+        onDismiss()
+    })
+
+    // Put it inside a Box that ignores all system Window insets and draws over everything
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            // This is key: ignore all insets to support full immersive view
     ) {
-        val view = LocalView.current
-        val dialogWindow = remember(view) {
-            var parent = view.parent
-            while (parent != null && parent !is androidx.compose.ui.window.DialogWindowProvider) {
-                parent = parent.parent
-            }
-            (parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
-        }
-
-        LaunchedEffect(dialogWindow) {
-            dialogWindow?.let { window ->
-                WindowCompat.setDecorFitsSystemWindows(window, false)
-                window.setFlags(
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-                )
+        val window = (context as? Activity)?.window
+        
+        // When Player is active, we go immersive
+        LaunchedEffect(window) {
+            window?.let { w ->
+                WindowCompat.setDecorFitsSystemWindows(w, false)
+                val controller = WindowCompat.getInsetsController(w, w.decorView)
+                controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         }
-
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = Color.Black
-        ) {
-            MXPlayerContent(
-                exoPlayer = exoPlayer,
-                title = title,
-                onDismiss = onDismiss,
-                onPositionChange = { lastSavedPos = it },
-                dialogWindow = dialogWindow
-            )
-        }
+        
+        MXPlayerContent(
+            exoPlayer = exoPlayer,
+            title = title,
+            onDismiss = onDismiss,
+            onPositionChange = { lastSavedPos = it },
+            dialogWindow = window
+        )
     }
 }
 
@@ -147,14 +140,24 @@ fun MXPlayerContent(
     var showBrightnessIndicator by remember { mutableStateOf(false) }
     var brightnessLevel by remember { mutableFloatStateOf(0f) }
 
+    // Extended Features State
+    var resizeMode by remember { mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
+    var playbackSpeed by remember { mutableFloatStateOf(1f) }
+    var repeatMode by remember { mutableIntStateOf(Player.REPEAT_MODE_OFF) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
+
     // Keep UI metrics in sync
     LaunchedEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(isPlayingChange: Boolean) {
                 isPlaying = isPlayingChange
             }
+            override fun onRepeatModeChanged(rMode: Int) {
+                repeatMode = rMode
+            }
         }
         exoPlayer.addListener(listener)
+        exoPlayer.repeatMode = repeatMode
         while (true) {
             if (!isSeeking) {
                 currentPosition = exoPlayer.currentPosition
@@ -168,7 +171,7 @@ fun MXPlayerContent(
     // Auto-hide controls
     LaunchedEffect(showControls, isPlaying) {
         if (showControls && isPlaying) {
-            delay(3000)
+            delay(4000)
             showControls = false
         }
     }
@@ -322,8 +325,11 @@ fun MXPlayerContent(
                 PlayerView(ctx).apply {
                     player = exoPlayer
                     useController = false // Custom controls
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    this.resizeMode = resizeMode
                 }
+            },
+            update = { view ->
+                view.resizeMode = resizeMode
             }
         )
 
@@ -376,7 +382,7 @@ fun MXPlayerContent(
                             detectTapGestures { /* consume tap */ }
                         }
                         .statusBarsPadding()
-                        .padding(16.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onDismiss) {
@@ -387,30 +393,90 @@ fun MXPlayerContent(
                         color = Color.White,
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
                     )
+                    
+                    // Audio Track / Subtitles
+                    IconButton(onClick = { showSettingsDialog = true }) {
+                        Icon(Icons.Outlined.Audiotrack, contentDescription = "Audio Tracks", tint = Color.White)
+                    }
+                    IconButton(onClick = { showSettingsDialog = true }) {
+                        Icon(Icons.Outlined.Subtitles, contentDescription = "Subtitles", tint = Color.White)
+                    }
+                    
+                    // Speed Control
+                    IconButton(onClick = {
+                        playbackSpeed = if (playbackSpeed >= 2f) 0.5f else playbackSpeed + 0.25f
+                        exoPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
+                    }) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Speed, contentDescription = "Speed", tint = Color.White)
+                            Text("${playbackSpeed}x", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+
+                    // Settings Button
+                    IconButton(onClick = { showSettingsDialog = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "More Settings", tint = Color.White)
+                    }
                 }
 
-                // Center Play/Pause
-                IconButton(
-                    onClick = {
-                        if (isPlaying) {
-                            exoPlayer.pause()
-                        } else {
-                            exoPlayer.play()
-                        }
-                    },
+                // Center Controls
+                Row(
                     modifier = Modifier
+                        .fillMaxWidth()
                         .align(Alignment.Center)
-                        .size(80.dp)
-                        .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                        .pointerInput(Unit) { detectTapGestures { /* consume tap */ } },
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = "Play/Pause",
-                        tint = Color.White,
-                        modifier = Modifier.size(48.dp)
-                    )
+                    IconButton(
+                        onClick = { exoPlayer.seekToPreviousMediaItem() },
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(Icons.Default.SkipPrevious, "Previous", tint = Color.White, modifier = Modifier.size(36.dp))
+                    }
+                    
+                    IconButton(
+                        onClick = { exoPlayer.seekTo((exoPlayer.currentPosition - 10000).coerceAtLeast(0)) },
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(Icons.Default.FastRewind, "Rewind 10s", tint = Color.White, modifier = Modifier.size(36.dp))
+                    }
+
+                    IconButton(
+                        onClick = {
+                            if (isPlaying) {
+                                exoPlayer.pause()
+                            } else {
+                                exoPlayer.play()
+                            }
+                        },
+                        modifier = Modifier
+                            .size(80.dp)
+                            .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = "Play/Pause",
+                            tint = Color.White,
+                            modifier = Modifier.size(48.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { exoPlayer.seekTo((exoPlayer.currentPosition + 10000).coerceAtMost(exoPlayer.duration)) },
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(Icons.Default.FastForward, "Forward 10s", tint = Color.White, modifier = Modifier.size(36.dp))
+                    }
+                    
+                    IconButton(
+                        onClick = { exoPlayer.seekToNextMediaItem() },
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(Icons.Default.SkipNext, "Next", tint = Color.White, modifier = Modifier.size(36.dp))
+                    }
                 }
 
                 // Bottom Bar
@@ -427,9 +493,41 @@ fun MXPlayerContent(
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(formatTime(currentPosition), color = Color.White)
+                        
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Repeat Mode
+                            IconButton(onClick = {
+                                repeatMode = when(repeatMode) {
+                                    Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                                    Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                                    else -> Player.REPEAT_MODE_OFF
+                                }
+                                exoPlayer.repeatMode = repeatMode
+                            }) {
+                                val ri = when(repeatMode) {
+                                    Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOne
+                                    else -> Icons.Default.Repeat
+                                }
+                                val rt = if(repeatMode == Player.REPEAT_MODE_OFF) Color.Gray else Color.White
+                                Icon(ri, "Repeat", tint = rt)
+                            }
+
+                            // Crop / Mode
+                            IconButton(onClick = {
+                                resizeMode = when(resizeMode) {
+                                    AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                    AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+                                    else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                }
+                            }) {
+                                Icon(if(resizeMode == AspectRatioFrameLayout.RESIZE_MODE_FIT) Icons.Default.FullscreenExit else Icons.Default.Fullscreen, "Resize", tint = Color.White)
+                            }
+                        }
+
                         Text(formatTime(duration), color = Color.White)
                     }
                     
@@ -446,6 +544,11 @@ fun MXPlayerContent(
                 }
             }
         }
+    }
+    
+    // 147 Features Checklist & Advanced Options Dialog
+    if (showSettingsDialog) {
+        UltimateFeaturesDialog(onDismiss = { showSettingsDialog = false })
     }
 }
 
