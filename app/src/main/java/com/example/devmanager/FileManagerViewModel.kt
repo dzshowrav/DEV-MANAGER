@@ -40,22 +40,6 @@ data class FileItem(
     val resolution: String? = null
 )
 
-fun getMediaResolution(file: File, extension: String): String? {
-    try {
-        if (extension in listOf("jpg", "jpeg", "png", "gif", "bmp", "webp")) {
-            val options = BitmapFactory.Options()
-            options.inJustDecodeBounds = true
-            BitmapFactory.decodeFile(file.absolutePath, options)
-            if (options.outWidth > 0 && options.outHeight > 0) {
-                return "${options.outWidth} x ${options.outHeight}"
-            }
-        }
-    } catch (e: Exception) {
-        // Ignore
-    }
-    return null
-}
-
 enum class SortType { NAME, SIZE, DATE, TYPE }
 enum class ViewMode { DETAILED, COMPACT, GRID }
 
@@ -290,12 +274,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
                         listFiles.mapNotNull { file ->
                             try {
                                 val sizeLabel = if (file.isDirectory) {
-                                    val count = try {
-                                        file.list()?.size ?: 0
-                                    } catch (e: Exception) {
-                                        0
-                                    }
-                                    "$count items"
+                                    "Folder"
                                 } else {
                                     formatSize(file.length())
                                 }
@@ -308,7 +287,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
                                     lastModified = file.lastModified(),
                                     lastModifiedLabel = try { dateFormat.format(Date(file.lastModified())) } catch (e: Exception) { "" },
                                     extension = file.extension.lowercase(),
-                                    resolution = getMediaResolution(file, file.extension.lowercase())
+                                    resolution = null
                                 )
                             } catch (e: Exception) {
                                 null
@@ -328,30 +307,34 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun applyFilters() {
-        var filteredList = _allFiles.value
+        viewModelScope.launch {
+            val sortedList = withContext(Dispatchers.Default) {
+                var filteredList = _allFiles.value
 
-        if (!_showHiddenFiles.value) {
-            filteredList = filteredList.filter { !it.name.startsWith(".") }
-        }
+                if (!_showHiddenFiles.value) {
+                    filteredList = filteredList.filter { !it.name.startsWith(".") }
+                }
 
-        val query = _searchQuery.value.trim().lowercase()
-        if (query.isNotEmpty()) {
-            filteredList = filteredList.filter { it.name.lowercase().contains(query) }
-        }
+                val query = _searchQuery.value.trim().lowercase()
+                if (query.isNotEmpty()) {
+                    filteredList = filteredList.filter { it.name.lowercase().contains(query) }
+                }
 
-        var sortedList = when (_sortType.value) {
-            SortType.NAME -> filteredList.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
-            SortType.SIZE -> filteredList.sortedWith(compareBy({ !it.isDirectory }, { it.size }))
-            SortType.DATE -> filteredList.sortedWith(compareBy({ !it.isDirectory }, { it.lastModified }))
-            SortType.TYPE -> filteredList.sortedWith(compareBy({ !it.isDirectory }, { it.extension }))
+                var sorted = when (_sortType.value) {
+                    SortType.NAME -> filteredList.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+                    SortType.SIZE -> filteredList.sortedWith(compareBy({ !it.isDirectory }, { it.size }))
+                    SortType.DATE -> filteredList.sortedWith(compareBy({ !it.isDirectory }, { it.lastModified }))
+                    SortType.TYPE -> filteredList.sortedWith(compareBy({ !it.isDirectory }, { it.extension }))
+                }
+                
+                if (_sortDescending.value) {
+                    val (dirs, files) = sorted.partition { it.isDirectory }
+                    sorted = dirs.reversed() + files.reversed()
+                }
+                sorted
+            }
+            _files.value = sortedList
         }
-        
-        if (_sortDescending.value) {
-            val (dirs, files) = sortedList.partition { it.isDirectory }
-            sortedList = dirs.reversed() + files.reversed()
-        }
-
-        _files.value = sortedList
     }
 
     // Settings

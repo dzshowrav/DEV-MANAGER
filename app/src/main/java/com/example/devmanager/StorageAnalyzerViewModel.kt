@@ -44,6 +44,7 @@ class StorageAnalyzerViewModel(application: Application) : AndroidViewModel(appl
             _result.value = AnalyzerResult()
             withContext(Dispatchers.IO) {
                 var total = 0L
+                var count = 0
                 var audio = 0L
                 var video = 0L
                 var image = 0L
@@ -77,6 +78,7 @@ class StorageAnalyzerViewModel(application: Application) : AndroidViewModel(appl
                             } else {
                                 val len = file.length()
                                 total += len
+                                count++
                                 val ext = file.extension.lowercase()
                                 
                                 when (ext) {
@@ -101,7 +103,7 @@ class StorageAnalyzerViewModel(application: Application) : AndroidViewModel(appl
                                     sizeMap.getOrPut(len) { mutableListOf() }.add(file)
                                 }
                                 
-                                if (total % 100 == 0L) { // update progress periodically
+                                if (count % 100 == 0) { // update progress periodically
                                     _scanProgress.value = file.absolutePath
                                 }
                             }
