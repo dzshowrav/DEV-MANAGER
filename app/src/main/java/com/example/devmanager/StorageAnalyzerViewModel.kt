@@ -24,7 +24,8 @@ data class AnalyzerResult(
     val largeFiles: List<File> = emptyList(),
     val emptyFolders: List<File> = emptyList(),
     val duplicates: List<List<File>> = emptyList(),
-    val junkFiles: List<File> = emptyList() // temp, log, cache
+    val junkFiles: List<File> = emptyList(), // temp, log, cache
+    val rootNode: DirNode? = null
 )
 
 class StorageAnalyzerViewModel(application: Application) : AndroidViewModel(application) {
@@ -121,6 +122,9 @@ class StorageAnalyzerViewModel(application: Application) : AndroidViewModel(appl
                     group.groupBy { it.name }.values.filter { it.size > 1 }
                 }.flatten()
 
+                val rootDir = File(root)
+                val rootNode = buildDirTree(rootDir, 0, 3) // depth=3 to keep it performant for the sunburst chart
+
                 _result.value = AnalyzerResult(
                     totalSize = total,
                     audioSize = audio,
@@ -133,7 +137,8 @@ class StorageAnalyzerViewModel(application: Application) : AndroidViewModel(appl
                     largeFiles = largeFiles.take(50), // top 50
                     emptyFolders = emptyFolders.take(50), // top 50
                     duplicates = duplicates.take(20), // top 20 groups
-                    junkFiles = junkFiles
+                    junkFiles = junkFiles,
+                    rootNode = rootNode
                 )
             }
             _isAnalyzing.value = false
@@ -150,6 +155,53 @@ class StorageAnalyzerViewModel(application: Application) : AndroidViewModel(appl
             // Re-analyze or just manual update?
             // To keep it simple, we could clear the result list locally or let user re-scan
         }
+    }
+
+    private fun buildDirTree(dir: File, currentDepth: Int, maxDepth: Int): DirNode {
+        var totalSize = 0L
+        val children = mutableListOf<DirNode>()
+        if (currentDepth <= maxDepth) {
+            val files = dir.listFiles()
+            if (files != null) {
+                for (f in files) {
+                    if (f.isDirectory) {
+                        try {
+                            if (!f.name.startsWith(".")) {
+                                val childNode = buildDirTree(f, currentDepth + 1, maxDepth)
+                                if (childNode.size > 0) {
+                                    children.add(childNode)
+                                    totalSize += childNode.size
+                                }
+                            }
+                        } catch (e: Exception) {}
+                    } else {
+                        val size = f.length()
+                        totalSize += size
+                    }
+                }
+            }
+        } else {
+            // we stop diving, just recursively calculate rest size
+            totalSize = calculateDirSizeFast(dir)
+        }
+        
+        children.sortByDescending { it.size }
+        return DirNode(dir.name, totalSize, children)
+    }
+
+    private fun calculateDirSizeFast(dir: File): Long {
+        var size = 0L
+        val stack = mutableListOf(dir)
+        while (stack.isNotEmpty()) {
+            val curr = stack.removeAt(stack.size - 1)
+            val files = curr.listFiles()
+            if (files != null) {
+                for (f in files) {
+                    if (f.isDirectory) stack.add(f) else size += f.length()
+                }
+            }
+        }
+        return size
     }
 
     fun cleanCache() {

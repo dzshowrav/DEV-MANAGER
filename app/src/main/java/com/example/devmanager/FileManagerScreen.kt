@@ -94,6 +94,11 @@ fun FileManagerApp(viewModel: FileManagerViewModel) {
     var showAppManager by remember { mutableStateOf(false) }
     var showMediaManager by remember { mutableStateOf(false) }
     var showNetworkManager by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+
+    if (showSettings) {
+        SettingsDialog(onDismiss = { showSettings = false })
+    }
 
     if (showStorageAnalyzer) {
         StorageAnalyzerScreen(
@@ -134,6 +139,14 @@ fun FileManagerApp(viewModel: FileManagerViewModel) {
         return
     }
 
+    val documentViewerFile by viewModel.documentViewerFile.collectAsStateWithLifecycle()
+    if (documentViewerFile != null) {
+        DocumentViewerScreen(file = documentViewerFile!!) {
+            viewModel.closeDocumentViewer()
+        }
+        return
+    }
+
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     
@@ -161,6 +174,11 @@ fun FileManagerApp(viewModel: FileManagerViewModel) {
                 scope.launch { 
                     drawerState.close() 
                     showNetworkManager = true
+                }
+            }, onOpenSettings = {
+                scope.launch { 
+                    drawerState.close() 
+                    showSettings = true
                 }
             })
         }
@@ -365,25 +383,31 @@ fun MainScreen(viewModel: FileManagerViewModel, onOpenDrawer: () -> Unit) {
                         }
                     }
                 } else {
-                    if (viewMode == ViewMode.DETAILED || viewMode == ViewMode.COMPACT) {
-                            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 120.dp)) {
-                                items(files, key = { it.file.absolutePath }) { item ->
-                                    val isSelected = selectedFiles.contains(item.file)
-                                    val isSelectMode = selectedFiles.isNotEmpty()
-                                    FileListItem(
-                                        item = item,
-                                        isSelected = isSelected,
-                                        isSelectMode = isSelectMode,
-                                        isCompact = (viewMode == ViewMode.COMPACT),
-                                        onClick = {
-                                            if (isSelectMode) viewModel.toggleSelection(item.file)
-                                            else handleFileClick(context, item, viewModel)
-                                        },
-                                        onLongClick = {
-                                            if (!isSelectMode) viewModel.toggleSelection(item.file)
-                                        },
-                                        onMoreClick = { fileOptionsSelected = item }
-                                    )
+                        if (viewMode == ViewMode.DETAILED || viewMode == ViewMode.COMPACT) {
+                            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+                            FastScrollWrapper(
+                                listState = listState,
+                                labelProvider = { index -> files.getOrNull(index)?.name ?: "" }
+                            ) {
+                                LazyColumn(modifier = Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 120.dp)) {
+                                    items(files, key = { it.file.absolutePath }) { item ->
+                                        val isSelected = selectedFiles.contains(item.file)
+                                        val isSelectMode = selectedFiles.isNotEmpty()
+                                        FileListItem(
+                                            item = item,
+                                            isSelected = isSelected,
+                                            isSelectMode = isSelectMode,
+                                            isCompact = (viewMode == ViewMode.COMPACT),
+                                            onClick = {
+                                                if (isSelectMode) viewModel.toggleSelection(item.file)
+                                                else handleFileClick(context, item, viewModel)
+                                            },
+                                            onLongClick = {
+                                                if (!isSelectMode) viewModel.toggleSelection(item.file)
+                                            },
+                                            onMoreClick = { fileOptionsSelected = item }
+                                        )
+                                    }
                                 }
                             }
                         } else if (viewMode == ViewMode.GRID) {
@@ -633,7 +657,7 @@ fun SortModeOption(label: String, icon: androidx.compose.ui.graphics.vector.Imag
 }
 
 @Composable
-fun DrawerContent(viewModel: FileManagerViewModel, onNavigate: () -> Unit, onOpenAnalyzer: () -> Unit = {}, onOpenAppManager: () -> Unit = {}, onOpenMediaManager: () -> Unit = {}, onOpenNetworkManager: () -> Unit = {}) {
+fun DrawerContent(viewModel: FileManagerViewModel, onNavigate: () -> Unit, onOpenAnalyzer: () -> Unit = {}, onOpenAppManager: () -> Unit = {}, onOpenMediaManager: () -> Unit = {}, onOpenNetworkManager: () -> Unit = {}, onOpenSettings: () -> Unit = {}) {
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
     val storageVolumes by viewModel.storageVolumes.collectAsStateWithLifecycle()
     val currentCategory by viewModel.currentCategory.collectAsStateWithLifecycle()
@@ -694,6 +718,7 @@ fun DrawerContent(viewModel: FileManagerViewModel, onNavigate: () -> Unit, onOpe
                 NavigationDrawerItem(label = { Text("Media Manager") }, icon = { Icon(Icons.Default.PermMedia, null) }, selected = false, onClick = onOpenMediaManager, modifier = Modifier.padding(horizontal = 12.dp))
                 NavigationDrawerItem(label = { Text("Network Center") }, icon = { Icon(Icons.Default.Public, null) }, selected = false, onClick = onOpenNetworkManager, modifier = Modifier.padding(horizontal = 12.dp))
                 NavigationDrawerItem(label = { Text("Trash Bin") }, icon = { Icon(Icons.Default.Delete, null) }, selected = false, onClick = { viewModel.navigateTo(viewModel.trashDirPath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp))
+                NavigationDrawerItem(label = { Text("Settings") }, icon = { Icon(Icons.Default.Settings, null) }, selected = false, onClick = onOpenSettings, modifier = Modifier.padding(horizontal = 12.dp))
                 
                 if (bookmarks.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(16.dp))
@@ -747,8 +772,12 @@ fun handleFileClick(context: android.content.Context, item: FileItem, viewModel:
     } else {
         val extension = item.extension.lowercase()
         val imageExtensions = listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
+        val docExtensions = listOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx")
+        
         if (extension in imageExtensions) {
             viewModel.openImageViewer(item.file)
+        } else if (extension in docExtensions) {
+            viewModel.openDocumentViewer(item.file)
         } else if (extension in listOf("txt", "log", "md", "csv", "json")) {
             viewModel.openTextEditor(item.file)
         } else if (extension == "apk") {
@@ -971,11 +1000,16 @@ fun FileGridItem(item: FileItem, isSelected: Boolean, isSelectMode: Boolean, onC
 
 @Composable
 fun FileIconBox(item: FileItem, size: androidx.compose.ui.unit.Dp, iconSize: androidx.compose.ui.unit.Dp) {
-    if (!item.isDirectory && item.extension in listOf("jpg", "jpeg", "png", "webp", "gif", "bmp")) {
-        AsyncImage(
+    val imageExtensions = listOf("jpg", "jpeg", "png", "webp", "gif", "bmp")
+    val videoExtensions = listOf("mp4", "mkv", "avi", "mov", "webm", "3gp")
+    val audioExtensions = listOf("mp3", "flac", "wav", "ogg", "m4a", "aac")
+    val isMedia = item.extension.lowercase() in (imageExtensions + videoExtensions + audioExtensions)
+
+    if (!item.isDirectory && isMedia) {
+        coil.compose.AsyncImage(
             model = item.file,
             contentDescription = null,
-            contentScale = ContentScale.Crop,
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             modifier = Modifier.size(size).clip(if (size > 50.dp) RoundedCornerShape(8.dp) else CircleShape)
         )
     } else {

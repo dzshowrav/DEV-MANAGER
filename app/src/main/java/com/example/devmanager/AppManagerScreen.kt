@@ -382,13 +382,19 @@ fun AppListTabContent(
         return
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    FastScrollWrapper(
+        listState = listState,
+        labelProvider = { index -> apps.getOrNull(index)?.name ?: "" }
     ) {
-        items(apps, key = { it.packageName }) { app ->
-            val isSelected = selectedPackages.contains(app.packageName)
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(apps, key = { it.packageName }) { app ->
+                val isSelected = selectedPackages.contains(app.packageName)
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
@@ -491,6 +497,7 @@ fun AppListTabContent(
         }
     }
 }
+}
 
 @Composable
 fun LocalApkTabContent(
@@ -523,13 +530,19 @@ fun LocalApkTabContent(
         return
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    FastScrollWrapper(
+        listState = listState,
+        labelProvider = { index -> apkFiles.getOrNull(index)?.label ?: "" }
     ) {
-        items(apkFiles, key = { it.file.absolutePath }) { apk ->
-            Card(
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(apkFiles, key = { it.file.absolutePath }) { apk ->
+                Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -628,6 +641,7 @@ fun LocalApkTabContent(
             }
         }
     }
+}
 }
 
 @Composable

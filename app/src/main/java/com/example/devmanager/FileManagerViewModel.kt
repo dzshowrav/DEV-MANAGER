@@ -130,6 +130,18 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
     val textEditorFile = _textEditorFile.asStateFlow()
     private val _textEditorContent = MutableStateFlow("")
     val textEditorContent = _textEditorContent.asStateFlow()
+    
+    // Document Viewer Mode
+    private val _documentViewerFile = MutableStateFlow<File?>(null)
+    val documentViewerFile = _documentViewerFile.asStateFlow()
+
+    fun openDocumentViewer(file: File) {
+        _documentViewerFile.value = file
+    }
+    
+    fun closeDocumentViewer() {
+        _documentViewerFile.value = null
+    }
 
     // Built-in Internal Image Viewer Mode
     private val _imageViewerFile = MutableStateFlow<File?>(null)

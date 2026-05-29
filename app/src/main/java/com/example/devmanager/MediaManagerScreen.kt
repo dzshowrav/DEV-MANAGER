@@ -605,6 +605,12 @@ fun SoundTracksListView(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(Icons.Default.MusicNote, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                            AsyncImage(
+                                model = java.io.File(song.path),
+                                contentDescription = "Album Art",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
                         }
 
                         Spacer(modifier = Modifier.width(16.dp))
