@@ -1,5 +1,5 @@
 <div align="center">
-<img width="800" alt="Dev Manager Thumbnail" src="app/src/main/res/drawable/dev_manager_thumbnail_1779986755637.png" />
+<img width="800" alt="Dev Manager Thumbnail" src="assets/dev_manager_thumbnail_1779986755637.png" />
 </div>
 
 # DEV MANAGER - Advanced Android System & File Tool
