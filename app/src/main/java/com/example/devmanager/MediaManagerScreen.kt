@@ -38,9 +38,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.media3.common.MediaItem as Media3Item
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import kotlinx.coroutines.delay
@@ -54,7 +51,6 @@ fun MediaManagerScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val images by viewModel.images.collectAsStateWithLifecycle()
@@ -69,11 +65,21 @@ fun MediaManagerScreen(
     
     // Feature Detail Views
     var activeImageIndex by remember { mutableStateOf<Int?>(null) }
-    var activeVideoUrl by remember { mutableStateOf<MediaItem?>(null) }
-    var activeAudioItem by remember { mutableStateOf<MediaItem?>(null) }
     var showMetadataItem by remember { mutableStateOf<MediaItem?>(null) }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var activePlaylistDetails by remember { mutableStateOf<Playlist?>(null) }
+
+    fun playMediaWithIntent(item: MediaItem) {
+        try {
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                setDataAndType(item.uri, item.mimeType)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(context, "No app found to play this media.", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
 
     BackHandler {
         if (activeImageIndex != null) {
@@ -186,8 +192,7 @@ fun MediaManagerScreen(
                                 albums = imageAlbums,
                                 allItems = images,
                                 onAlbumSelect = { activeAlbumName = it.name },
-                                onSelectAll = { activeImageIndex = 0 },
-                                onInfo = { showMetadataItem = it }
+                                onSelectAll = { activeImageIndex = 0 }
                             )
                         }
                     }
@@ -196,23 +201,20 @@ fun MediaManagerScreen(
                             val albumItems = videoAlbums.find { it.name == activeAlbumName }?.items ?: emptyList()
                             VideoGridView(
                                 items = albumItems,
-                                onSelect = { activeVideoUrl = it },
+                                onSelect = { playMediaWithIntent(it) },
                                 onInfo = { showMetadataItem = it }
                             )
                         } else {
                             VideoAlbumsView(
                                 albums = videoAlbums,
-                                allItems = videos,
-                                onAlbumSelect = { activeAlbumName = it.name },
-                                onVideoSelect = { activeVideoUrl = it },
-                                onInfo = { showMetadataItem = it }
+                                onAlbumSelect = { activeAlbumName = it.name }
                             )
                         }
                     }
                     2 -> { // Music tab
                         SoundTracksListView(
                             tracks = audioTracks,
-                            onPlayTrack = { activeAudioItem = it },
+                            onPlayTrack = { playMediaWithIntent(it) },
                             onInfo = { showMetadataItem = it },
                             playlists = playlists,
                             onAddToPlaylist = { playlist, track ->
@@ -225,7 +227,7 @@ fun MediaManagerScreen(
                             PlaylistDetailScreen(
                                 playlist = activePlaylistDetails!!,
                                 allTracks = audioTracks,
-                                onPlayTrack = { activeAudioItem = it },
+                                onPlayTrack = { playMediaWithIntent(it) },
                                 onRemoveTrack = { path ->
                                     viewModel.removeTrackFromPlaylist(activePlaylistDetails!!.id, path)
                                     // Refresh specific playlists item detail view state
@@ -260,24 +262,6 @@ fun MediaManagerScreen(
             startIndex = activeImageIndex!!,
             onDismiss = { activeImageIndex = null },
             onInfo = { showMetadataItem = it }
-        )
-    }
-
-    // Immersive ExoPlayer Video Dialog Client
-    if (activeVideoUrl != null) {
-        MXPlayerDialog(
-            mediaPath = activeVideoUrl!!.path,
-            title = activeVideoUrl!!.displayName,
-            onDismiss = { activeVideoUrl = null }
-        )
-    }
-
-    // Rich Music Playback Console Card Overlay
-    if (activeAudioItem != null) {
-        MXPlayerDialog(
-            mediaPath = activeAudioItem!!.path,
-            title = activeAudioItem!!.displayName,
-            onDismiss = { activeAudioItem = null }
         )
     }
 
@@ -331,8 +315,7 @@ fun ImageAlbumnsView(
     albums: List<AlbumItem>,
     allItems: List<MediaItem>,
     onAlbumSelect: (AlbumItem) -> Unit,
-    onSelectAll: () -> Unit,
-    onInfo: (MediaItem) -> Unit
+    onSelectAll: () -> Unit
 ) {
     if (albums.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -455,10 +438,7 @@ fun ImageGridView(
 @Composable
 fun VideoAlbumsView(
     albums: List<AlbumItem>,
-    allItems: List<MediaItem>,
-    onAlbumSelect: (AlbumItem) -> Unit,
-    onVideoSelect: (MediaItem) -> Unit,
-    onInfo: (MediaItem) -> Unit
+    onAlbumSelect: (AlbumItem) -> Unit
 ) {
     if (albums.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

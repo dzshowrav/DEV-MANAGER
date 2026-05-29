@@ -143,10 +143,6 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         _imageViewerFile.value = null
     }
 
-    // Media Player Mode
-    private val _mediaPlayerFile = MutableStateFlow<File?>(null)
-    val mediaPlayerFile = _mediaPlayerFile.asStateFlow()
-
     private val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
 
     fun setPermissionGranted(granted: Boolean) {
@@ -698,14 +694,6 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     // Text Editor
-    fun openMediaPlayer(file: File) {
-        _mediaPlayerFile.value = file
-    }
-
-    fun closeMediaPlayer() {
-        _mediaPlayerFile.value = null
-    }
-
     fun openTextEditor(file: File) {
         viewModelScope.launch {
             _isLoading.value = true

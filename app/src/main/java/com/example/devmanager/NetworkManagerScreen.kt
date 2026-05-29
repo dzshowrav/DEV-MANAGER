@@ -29,9 +29,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.media3.common.MediaItem as Media3Item
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -68,15 +65,9 @@ fun NetworkManagerScreen(
     var isSavingTextState by remember { mutableStateOf(false) }
 
     // Media stream state
-    var streamingVideoFile by remember { mutableStateOf<RemoteFile?>(null) }
-    var streamingAudioFile by remember { mutableStateOf<RemoteFile?>(null) }
 
     BackHandler {
-        if (streamingVideoFile != null) {
-            streamingVideoFile = null
-        } else if (streamingAudioFile != null) {
-            streamingAudioFile = null
-        } else if (editingFileState != null) {
+        if (editingFileState != null) {
             editingFileState = null
             fileContentState = ""
         } else if (connectedProfile != null) {
@@ -293,10 +284,17 @@ fun NetworkManagerScreen(
                                                             fileContentState = viewModel.readRemoteText(rf)
                                                             isSavingTextState = false
                                                         }
-                                                    } else if (ext in listOf("mp4", "mkv", "3gp", "avi")) {
-                                                        streamingVideoFile = rf
-                                                    } else if (ext in listOf("mp3", "wav", "m4a", "ogg")) {
-                                                        streamingAudioFile = rf
+                                                    } else if (ext in listOf("mp4", "mkv", "3gp", "avi", "mp3", "wav", "m4a", "ogg")) {
+                                                        val streamUrl = viewModel.getExoPlayerStreamUrl(rf)
+                                                        val mime = if (ext in listOf("mp4", "mkv", "3gp", "avi")) "video/*" else "audio/*"
+                                                        try {
+                                                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                                                setDataAndType(android.net.Uri.parse(streamUrl), mime)
+                                                            }
+                                                            context.startActivity(intent)
+                                                        } catch (e: Exception) {
+                                                            android.widget.Toast.makeText(context, "No media player found.", android.widget.Toast.LENGTH_SHORT).show()
+                                                        }
                                                     } else {
                                                         android.widget.Toast.makeText(context, "${rf.name} cannot be open directly. Format unsupported.", android.widget.Toast.LENGTH_SHORT).show()
                                                     }
@@ -818,21 +816,5 @@ fun NetworkManagerScreen(
             }
         }
     }
-
-    // EXOPLAYER SYSTEM STREAM PLAYERS
-    if (streamingVideoFile != null) {
-        MXPlayerDialog(
-            mediaPath = viewModel.getExoPlayerStreamUrl(streamingVideoFile!!),
-            title = streamingVideoFile!!.name,
-            onDismiss = { streamingVideoFile = null }
-        )
-    }
-
-    if (streamingAudioFile != null) {
-        MXPlayerDialog(
-            mediaPath = viewModel.getExoPlayerStreamUrl(streamingAudioFile!!),
-            title = streamingAudioFile!!.name,
-            onDismiss = { streamingAudioFile = null }
-        )
-    }
 }
+

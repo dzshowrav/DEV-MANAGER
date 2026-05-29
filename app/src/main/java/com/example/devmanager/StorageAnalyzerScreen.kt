@@ -30,15 +30,22 @@ fun StorageAnalyzerScreen(
     fileViewModel: FileManagerViewModel,
     onBack: () -> Unit
 ) {
-    BackHandler { onBack() }
-    val isAnalyzing by viewModel.isAnalyzing.collectAsStateWithLifecycle()
-    val result by viewModel.result.collectAsStateWithLifecycle()
-    val scanProgress by viewModel.scanProgress.collectAsStateWithLifecycle()
-
     var showLargeFiles by remember { mutableStateOf(false) }
     var showEmptyFolders by remember { mutableStateOf(false) }
     var showDuplicates by remember { mutableStateOf(false) }
     var showJunkFiles by remember { mutableStateOf(false) }
+
+    BackHandler {
+        if (showLargeFiles) showLargeFiles = false
+        else if (showEmptyFolders) showEmptyFolders = false
+        else if (showDuplicates) showDuplicates = false
+        else if (showJunkFiles) showJunkFiles = false
+        else onBack()
+    }
+    
+    val isAnalyzing by viewModel.isAnalyzing.collectAsStateWithLifecycle()
+    val result by viewModel.result.collectAsStateWithLifecycle()
+    val scanProgress by viewModel.scanProgress.collectAsStateWithLifecycle()
     
     val storageRoot = fileViewModel.storageRoot
 

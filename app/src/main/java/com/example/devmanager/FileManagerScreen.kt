@@ -134,12 +134,6 @@ fun FileManagerApp(viewModel: FileManagerViewModel) {
         return
     }
 
-    val mediaPlayerFile by viewModel.mediaPlayerFile.collectAsStateWithLifecycle()
-    if (mediaPlayerFile != null) {
-        MediaPlayerScreen(viewModel, file = mediaPlayerFile!!)
-        return
-    }
-
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     
@@ -149,17 +143,25 @@ fun FileManagerApp(viewModel: FileManagerViewModel) {
             DrawerContent(viewModel, onNavigate = {
                 scope.launch { drawerState.close() }
             }, onOpenAnalyzer = {
-                scope.launch { drawerState.close() }
-                showStorageAnalyzer = true
+                scope.launch { 
+                    drawerState.close() 
+                    showStorageAnalyzer = true
+                }
             }, onOpenAppManager = {
-                scope.launch { drawerState.close() }
-                showAppManager = true
+                scope.launch { 
+                    drawerState.close() 
+                    showAppManager = true
+                }
             }, onOpenMediaManager = {
-                scope.launch { drawerState.close() }
-                showMediaManager = true
+                scope.launch { 
+                    drawerState.close() 
+                    showMediaManager = true
+                }
             }, onOpenNetworkManager = {
-                scope.launch { drawerState.close() }
-                showNetworkManager = true
+                scope.launch { 
+                    drawerState.close() 
+                    showNetworkManager = true
+                }
             })
         }
     ) {
@@ -180,7 +182,6 @@ fun MainScreen(viewModel: FileManagerViewModel, onOpenDrawer: () -> Unit) {
     val sortType by viewModel.sortType.collectAsStateWithLifecycle()
     val showHiddenFiles by viewModel.showHiddenFiles.collectAsStateWithLifecycle()
     val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
-    val storageInfo by viewModel.storageInfo.collectAsStateWithLifecycle()
 
     val currentCategory by viewModel.currentCategory.collectAsStateWithLifecycle()
 
@@ -745,11 +746,8 @@ fun handleFileClick(context: android.content.Context, item: FileItem, viewModel:
         viewModel.navigateTo(item.file.absolutePath)
     } else {
         val extension = item.extension.lowercase()
-        val mediaExtensions = listOf("mp4", "mkv", "avi", "mov", "webm", "flv", "mp3", "wav", "m4a", "flac", "ogg", "aac")
         val imageExtensions = listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
-        if (extension in mediaExtensions) {
-            viewModel.openMediaPlayer(item.file)
-        } else if (extension in imageExtensions) {
+        if (extension in imageExtensions) {
             viewModel.openImageViewer(item.file)
         } else if (extension in listOf("txt", "log", "md", "csv", "json")) {
             viewModel.openTextEditor(item.file)
@@ -1012,108 +1010,6 @@ fun getFileIcon(item: FileItem) = when (item.extension) {
     "doc", "docx", "txt", "rtf", "md", "csv", "log" -> Icons.Default.Description
     "apk" -> Icons.Default.Android
     else -> Icons.AutoMirrored.Filled.InsertDriveFile
-}
-
-@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MediaPlayerScreen(viewModel: FileManagerViewModel, file: File) {
-    val context = LocalContext.current
-    var exoPlayer by remember { mutableStateOf<androidx.media3.exoplayer.ExoPlayer?>(null) }
-    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
-
-    DisposableEffect(file.absolutePath) {
-        val player = androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
-            val audioAttributes = androidx.media3.common.AudioAttributes.Builder()
-                .setUsage(androidx.media3.common.C.USAGE_MEDIA)
-                .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MUSIC)
-                .build()
-            setAudioAttributes(audioAttributes, true)
-            setMediaItem(androidx.media3.common.MediaItem.fromUri(Uri.fromFile(file)))
-            prepare()
-            play()
-        }
-        exoPlayer = player
-
-        onDispose {
-            player.stop()
-            player.release()
-            if (exoPlayer == player) {
-                exoPlayer = null
-            }
-        }
-    }
-
-    DisposableEffect(lifecycleOwner, exoPlayer) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            when (event) {
-                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> {
-                    exoPlayer?.pause()
-                }
-                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
-                    exoPlayer?.play()
-                }
-                else -> {}
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
-
-    BackHandler {
-        viewModel.closeMediaPlayer()
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White) },
-                navigationIcon = {
-                    IconButton(onClick = { viewModel.closeMediaPlayer() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black.copy(alpha = 0.5f))
-            )
-        },
-        containerColor = Color.Black
-    ) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-            if (exoPlayer != null) {
-                androidx.compose.ui.viewinterop.AndroidView(
-                    factory = { ctx ->
-                        androidx.media3.ui.PlayerView(ctx).apply {
-                            layoutParams = android.view.ViewGroup.LayoutParams(
-                                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                                android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                            )
-                            useController = true
-                            setShowNextButton(false)
-                            setShowPreviousButton(false)
-                            setShowFastForwardButton(true)
-                            setShowRewindButton(true)
-                            controllerShowTimeoutMs = 3000
-                            setShowBuffering(androidx.media3.ui.PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
-                        }
-                    },
-                    update = { view ->
-                        view.player = exoPlayer
-                    },
-                    onRelease = { view ->
-                        view.player = null
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                CircularProgressIndicator(color = Color.White)
-            }
-            // A click layer to allow toggling top app bar? PlayerView already does this.
-            // Just applying padding overlay on top
-            Box(Modifier.fillMaxWidth().height(paddingValues.calculateTopPadding()))
-        }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
