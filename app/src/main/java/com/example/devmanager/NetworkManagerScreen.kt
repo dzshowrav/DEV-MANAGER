@@ -799,46 +799,18 @@ fun NetworkManagerScreen(
 
     // EXOPLAYER SYSTEM STREAM PLAYERS
     if (streamingVideoFile != null) {
-        VideoPlayerDialog(
-            mediaItem = MediaItem(
-                id = 0L,
-                uri = Uri.parse(viewModel.getExoPlayerStreamUrl(streamingVideoFile!!)),
-                path = viewModel.getExoPlayerStreamUrl(streamingVideoFile!!),
-                displayName = streamingVideoFile!!.name,
-                album = "Remote Video",
-                artist = null,
-                duration = 0L,
-                size = streamingVideoFile!!.size,
-                dateAdded = 0L,
-                width = 0,
-                height = 0,
-                mimeType = "video/mp4"
-            ),
+        MXPlayerDialog(
+            mediaPath = viewModel.getExoPlayerStreamUrl(streamingVideoFile!!),
+            title = streamingVideoFile!!.name,
             onDismiss = { streamingVideoFile = null }
         )
     }
 
     if (streamingAudioFile != null) {
-        val rf = streamingAudioFile!!
-        SoundPlayerOverlay(
-            track = MediaItem(
-                id = 0L,
-                uri = Uri.parse(viewModel.getExoPlayerStreamUrl(rf)),
-                path = viewModel.getExoPlayerStreamUrl(rf),
-                displayName = rf.name,
-                album = "Remote Audio",
-                artist = "Remote Server Stream",
-                duration = 0L,
-                size = rf.size,
-                dateAdded = 0L,
-                width = 0,
-                height = 0,
-                mimeType = "audio/mpeg"
-            ),
-            allTracks = emptyList(),
-            onDismiss = { streamingAudioFile = null },
-            onNext = {},
-            onPrev = {}
+        MXPlayerDialog(
+            mediaPath = viewModel.getExoPlayerStreamUrl(streamingAudioFile!!),
+            title = streamingAudioFile!!.name,
+            onDismiss = { streamingAudioFile = null }
         )
     }
 }

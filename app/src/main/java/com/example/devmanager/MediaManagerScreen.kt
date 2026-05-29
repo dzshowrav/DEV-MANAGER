@@ -252,30 +252,19 @@ fun MediaManagerScreen(
 
     // Immersive ExoPlayer Video Dialog Client
     if (activeVideoUrl != null) {
-        VideoPlayerDialog(
-            mediaItem = activeVideoUrl!!,
+        MXPlayerDialog(
+            mediaPath = activeVideoUrl!!.path,
+            title = activeVideoUrl!!.displayName,
             onDismiss = { activeVideoUrl = null }
         )
     }
 
     // Rich Music Playback Console Card Overlay
     if (activeAudioItem != null) {
-        SoundPlayerOverlay(
-            track = activeAudioItem!!,
-            allTracks = audioTracks,
-            onDismiss = { activeAudioItem = null },
-            onNext = { current ->
-                val idx = audioTracks.indexOfFirst { it.id == current.id }
-                if (idx != -1 && idx < audioTracks.size - 1) {
-                    activeAudioItem = audioTracks[idx + 1]
-                }
-            },
-            onPrev = { current ->
-                val idx = audioTracks.indexOfFirst { it.id == current.id }
-                if (idx > 0) {
-                    activeAudioItem = audioTracks[idx - 1]
-                }
-            }
+        MXPlayerDialog(
+            mediaPath = activeAudioItem!!.path,
+            title = activeAudioItem!!.displayName,
+            onDismiss = { activeAudioItem = null }
         )
     }
 
@@ -1013,197 +1002,6 @@ fun ImageSlideshowVisualizer(
                                 )
                             }
                         }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ------------------- IMMERSIVE EXOPLAYER VIDEO PLAYER -------------------
-
-@Composable
-fun VideoPlayerDialog(
-    mediaItem: MediaItem,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(Media3Item.fromUri(Uri.parse(mediaItem.path)))
-            prepare()
-            playWhenReady = true
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            exoPlayer.release()
-        }
-    }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = Color.Black
-        ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                AndroidView(
-                    modifier = Modifier.fillMaxSize(),
-                    factory = { ctx ->
-                        PlayerView(ctx).apply {
-                            player = exoPlayer
-                        }
-                    }
-                )
-
-                // Back Button Toolbar
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(16.dp)
-                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                ) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Close", tint = Color.White)
-                }
-            }
-        }
-    }
-}
-
-// ------------------- PERSISTENT MUSIC PLAYBACK OVERLAY -------------------
-
-@Composable
-fun SoundPlayerOverlay(
-    track: MediaItem,
-    allTracks: List<MediaItem>,
-    onDismiss: () -> Unit,
-    onNext: (MediaItem) -> Unit,
-    onPrev: (MediaItem) -> Unit
-) {
-    val context = LocalContext.current
-    var isPlaying by remember { mutableStateOf(false) }
-    var currentPosition by remember { mutableLongStateOf(0L) }
-    var duration by remember { mutableLongStateOf(0L) }
-
-    val exoPlayer = remember(track.path) {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(Media3Item.fromUri(Uri.parse(track.path)))
-            prepare()
-            playWhenReady = true
-            isPlaying = true
-        }
-    }
-
-    // Keep state matching UI positions
-    LaunchedEffect(exoPlayer) {
-        while (true) {
-            currentPosition = exoPlayer.currentPosition
-            duration = exoPlayer.duration.coerceAtLeast(0L)
-            isPlaying = exoPlayer.isPlaying
-            delay(1000)
-        }
-    }
-
-    DisposableEffect(exoPlayer) {
-        onDispose {
-            exoPlayer.release()
-        }
-    }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            modifier = Modifier
-                .fillMaxWidth(0.9f)
-                .wrapContentHeight()
-                .padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Header dismiss bar
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Dismiss")
-                    }
-                }
-
-                // Vinyl/Icon Indicator
-                Box(
-                    modifier = Modifier
-                        .size(140.dp)
-                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.MusicNote, contentDescription = null, sizeIndex(64.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(track.displayName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-                Text(track.artist ?: "Unknown Artist", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Progress Info
-                Slider(
-                    value = currentPosition.toFloat(),
-                    onValueChange = { exoPlayer.seekTo(it.toLong()) },
-                    valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(formatDuration(currentPosition), style = MaterialTheme.typography.labelMedium)
-                    Text(formatDuration(duration), style = MaterialTheme.typography.labelMedium)
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Control panel ctars
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(20.dp)
-                ) {
-                    IconButton(onClick = { onPrev(track) }) {
-                        Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", modifier = Modifier.size(36.dp))
-                    }
-
-                    FilledIconButton(
-                        onClick = {
-                            if (exoPlayer.isPlaying) {
-                                exoPlayer.pause()
-                                isPlaying = false
-                            } else {
-                                exoPlayer.play()
-                                isPlaying = true
-                            }
-                        },
-                        modifier = Modifier.size(64.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = "Play/Pause",
-                            modifier = Modifier.size(36.dp)
-                        )
-                    }
-
-                    IconButton(onClick = { onNext(track) }) {
-                        Icon(Icons.Default.SkipNext, contentDescription = "Next", modifier = Modifier.size(36.dp))
                     }
                 }
             }

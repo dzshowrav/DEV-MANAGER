@@ -27,6 +27,8 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
+import android.provider.MediaStore
+import android.net.Uri
 
 data class FileItem(
     val file: File,
@@ -758,65 +760,51 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
     suspend fun scanMediaFolders(category: MediaCategory): List<FileItem> = withContext(Dispatchers.IO) {
         if (category == MediaCategory.NONE) return@withContext emptyList()
         
-        val matchedFolders = mutableSetOf<File>()
-        val extensions = when (category) {
-            MediaCategory.IMAGES -> listOf("jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif")
-            MediaCategory.VIDEOS -> listOf("mp4", "mkv", "avi", "mov", "webm", "3gp", "m4v")
-            MediaCategory.MUSIC -> listOf("mp3", "wav", "ogg", "m4a", "flac", "aac", "wma", "amr", "ape", "mid")
+        val folderCounts = mutableMapOf<File, Int>()
+
+        val collectionUri = when (category) {
+            MediaCategory.IMAGES -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            MediaCategory.VIDEOS -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            MediaCategory.MUSIC -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
             else -> return@withContext emptyList()
         }
 
-        val volumes = _storageVolumes.value.ifEmpty {
-            listOf(StorageVolumeInfo("Internal Storage", storageRoot, true, false))
-        }
+        val projection = arrayOf(MediaStore.MediaColumns.DATA)
 
-        for (volume in volumes) {
-            val root = File(volume.path)
-            if (!root.exists() || !root.isDirectory) continue
-            
-            try {
-                root.walkTopDown()
-                    .onEnter { dir ->
-                        val name = dir.name
-                        if (name.startsWith(".")) return@onEnter false
-                        if (name.equals("Android", ignoreCase = true)) return@onEnter false
-                        true
-                    }
-                    .forEach { file ->
-                        if (file.isDirectory) {
-                            try {
-                                val filesInDir = file.listFiles()
-                                if (filesInDir != null) {
-                                    val hasMedia = filesInDir.any { child ->
-                                        child.isFile && child.extension.lowercase() in extensions && !child.name.startsWith(".")
-                                    }
-                                    if (hasMedia) {
-                                        matchedFolders.add(file)
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                // skip permission denied or other exceptions
-                            }
+        try {
+            val application = getApplication<Application>()
+            application.contentResolver.query(
+                collectionUri,
+                projection,
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                val dataCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)
+                while (cursor.moveToNext()) {
+                    val path = cursor.getString(dataCol)
+                    if (path != null) {
+                        val file = File(path)
+                        val parent = file.parentFile
+                        if (parent != null) {
+                            folderCounts[parent] = (folderCounts[parent] ?: 0) + 1
                         }
                     }
-            } catch (e: Exception) {
-                // Ignore traverse error
+                }
             }
+        } catch (e: Exception) {
+            // Ignore MediaStore query errors
         }
 
-        matchedFolders.mapNotNull { folder ->
+        folderCounts.mapNotNull { (folder, count) ->
             try {
-                val filesInDir = folder.listFiles() ?: emptyArray()
-                val mediaCount = filesInDir.count { child ->
-                    child.isFile && child.extension.lowercase() in extensions && !child.name.startsWith(".")
-                }
-                if (mediaCount == 0) return@mapNotNull null
+                if (!folder.exists() || !folder.isDirectory) return@mapNotNull null
                 
                 val itemLabel = when (category) {
-                    MediaCategory.IMAGES -> "$mediaCount image" + if (mediaCount > 1) "s" else ""
-                    MediaCategory.VIDEOS -> "$mediaCount video" + if (mediaCount > 1) "s" else ""
-                    MediaCategory.MUSIC -> "$mediaCount audio file" + if (mediaCount > 1) "s" else ""
-                    else -> "$mediaCount items"
+                    MediaCategory.IMAGES -> "$count image" + if (count > 1) "s" else ""
+                    MediaCategory.VIDEOS -> "$count video" + if (count > 1) "s" else ""
+                    MediaCategory.MUSIC -> "$count audio file" + if (count > 1) "s" else ""
+                    else -> "$count items"
                 }
                 
                 FileItem(

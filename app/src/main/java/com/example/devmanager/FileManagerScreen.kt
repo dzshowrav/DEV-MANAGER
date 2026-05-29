@@ -352,22 +352,7 @@ fun MainScreen(viewModel: FileManagerViewModel, onOpenDrawer: () -> Unit) {
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            val pullRefreshState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
-            
-            LaunchedEffect(pullRefreshState.isRefreshing) {
-                if (pullRefreshState.isRefreshing) {
-                    viewModel.loadFiles(currentPath)
-                }
-            }
-            LaunchedEffect(isLoading) {
-                if (isLoading) {
-                    pullRefreshState.startRefresh()
-                } else {
-                    pullRefreshState.endRefresh()
-                }
-            }
-
-            Box(modifier = Modifier.fillMaxSize().nestedScroll(pullRefreshState.nestedScrollConnection)) {
+            Box(modifier = Modifier.fillMaxSize()) {
                 if (isLoading) {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 } else if (files.isEmpty()) {
@@ -908,7 +893,7 @@ fun FileListItem(item: FileItem, isSelected: Boolean, isSelectMode: Boolean, isC
             Checkbox(checked = isSelected, onCheckedChange = { onClick() }, modifier = Modifier.padding(end = 8.dp))
         }
         
-        FileIconBox(item = item, size = if (isCompact) 40.dp else 56.dp, iconSize = if (isCompact) 20.dp else 28.dp)
+        FileIconBox(item = item, size = if (isCompact) 32.dp else 40.dp, iconSize = if (isCompact) 18.dp else 24.dp)
         
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -934,9 +919,11 @@ fun FileListItem(item: FileItem, isSelected: Boolean, isSelectMode: Boolean, isC
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (!item.isDirectory || item.sizeLabel != "0 items") {
                             Text(text = item.sizeLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "•", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(modifier = Modifier.width(8.dp))
+                            if (!item.isDirectory && (item.extension.isNotBlank() || item.resolution != null)) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(text = "•", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
                         }
                         if (!item.isDirectory && item.extension.isNotBlank()) {
                             Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(4.dp)) {
@@ -1003,7 +990,7 @@ fun FileIconBox(item: FileItem, size: androidx.compose.ui.unit.Dp, iconSize: and
                     painter = androidx.compose.ui.res.painterResource(R.drawable.ic_custom_folder),
                     contentDescription = null,
                     tint = Color.Unspecified,
-                    modifier = Modifier.size(size)
+                    modifier = Modifier.size(size * 0.75f) // Reduced size by 25% for a more professional look
                 )
             } else {
                 Icon(
