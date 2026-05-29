@@ -29,6 +29,8 @@ import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.provider.MediaStore
 import android.net.Uri
+import android.graphics.pdf.PdfRenderer
+import android.os.ParcelFileDescriptor
 
 data class FileItem(
     val file: File,
@@ -130,18 +132,6 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
     val textEditorFile = _textEditorFile.asStateFlow()
     private val _textEditorContent = MutableStateFlow("")
     val textEditorContent = _textEditorContent.asStateFlow()
-    
-    // Document Viewer Mode
-    private val _documentViewerFile = MutableStateFlow<File?>(null)
-    val documentViewerFile = _documentViewerFile.asStateFlow()
-
-    fun openDocumentViewer(file: File) {
-        _documentViewerFile.value = file
-    }
-    
-    fun closeDocumentViewer() {
-        _documentViewerFile.value = null
-    }
 
     // Built-in Internal Image Viewer Mode
     private val _imageViewerFile = MutableStateFlow<File?>(null)
@@ -153,6 +143,88 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
     
     fun closeImageViewer() {
         _imageViewerFile.value = null
+    }
+
+    // Built-in Multi-format Document Viewer Mode
+    private val _docViewerFile = MutableStateFlow<File?>(null)
+    val docViewerFile = _docViewerFile.asStateFlow()
+
+    private val _docLines = MutableStateFlow<List<DocLine>>(emptyList())
+    val docLines = _docLines.asStateFlow()
+
+    private val _excelSheets = MutableStateFlow<List<ExcelSheet>>(emptyList())
+    val excelSheets = _excelSheets.asStateFlow()
+
+    private val _pdfPageCount = MutableStateFlow(0)
+    val pdfPageCount = _pdfPageCount.asStateFlow()
+
+    fun openDocumentViewer(file: File) {
+        _isLoading.value = true
+        _docViewerFile.value = file
+        val extension = file.extension.lowercase()
+
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                try {
+                    when (extension) {
+                        "docx", "doc" -> {
+                            val parsed = DocumentParser.parseDocx(file)
+                            _docLines.value = parsed
+                        }
+                        "xlsx", "xls" -> {
+                            val parsed = DocumentParser.parseXlsx(file)
+                            _excelSheets.value = parsed
+                        }
+                        "csv" -> {
+                            val parsed = parseCsvToSheet(file)
+                            _excelSheets.value = listOf(parsed)
+                        }
+                        "pdf" -> {
+                            val fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+                            val renderer = PdfRenderer(fd)
+                            _pdfPageCount.value = renderer.pageCount
+                            renderer.close()
+                            fd.close()
+                        }
+                        else -> {} // For txt, log, code etc, files are loaded directly in UI stream
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                } finally {
+                    _isLoading.value = false
+                }
+            }
+        }
+    }
+
+    fun closeDocumentViewer() {
+        _docViewerFile.value = null
+        _docLines.value = emptyList()
+        _excelSheets.value = emptyList()
+        _pdfPageCount.value = 0
+    }
+
+    private fun parseCsvToSheet(file: File): ExcelSheet {
+        val cells = mutableMapOf<String, String>()
+        var maxRow = 1
+        var maxCol = 1
+        try {
+            val lines = file.readLines()
+            for ((rIdx, line) in lines.withIndex()) {
+                val parts = line.split(",")
+                for ((cIdx, part) in parts.withIndex()) {
+                    val colLabel = DocumentParser.colIndexToLabel(cIdx)
+                    val cellAddress = "$colLabel${rIdx + 1}"
+                    cells[cellAddress] = part.trim()
+                    
+                    if (rIdx + 1 > maxRow) maxRow = rIdx + 1
+                    if (cIdx + 1 > maxCol) maxCol = cIdx + 1
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return ExcelSheet("CSV Grid Data", cells, maxRow, maxCol)
     }
 
     private val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
