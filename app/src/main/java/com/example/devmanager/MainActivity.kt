@@ -10,7 +10,6 @@ import androidx.compose.material3.lightColorScheme
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.Coil
 import coil.ImageLoader
-import coil.decode.VideoFrameDecoder
 
 import androidx.activity.enableEdgeToEdge
 
@@ -21,13 +20,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        val imageLoader = ImageLoader.Builder(this)
-            .components {
-                add(VideoFrameDecoder.Factory())
-                add(AudioAlbumArtFetcher.Factory())
-            }
-            .build()
-        Coil.setImageLoader(imageLoader)
+        Coil.setImageLoader(ImageLoader.Builder(this).build())
 
         try {
             enableEdgeToEdge()

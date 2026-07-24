@@ -90,44 +90,6 @@ fun FileManagerApp(viewModel: FileManagerViewModel) {
         return
     }
 
-    var showStorageAnalyzer by remember { mutableStateOf(false) }
-    var showAppManager by remember { mutableStateOf(false) }
-    var showMediaManager by remember { mutableStateOf(false) }
-    var showNetworkManager by remember { mutableStateOf(false) }
-
-    if (showStorageAnalyzer) {
-        StorageAnalyzerScreen(
-            viewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
-            fileViewModel = viewModel,
-            onBack = { showStorageAnalyzer = false }
-        )
-        return
-    }
-
-    if (showAppManager) {
-        AppManagerScreen(
-            viewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
-            onBack = { showAppManager = false }
-        )
-        return
-    }
-
-    if (showMediaManager) {
-        MediaManagerScreen(
-            viewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
-            onBack = { showMediaManager = false }
-        )
-        return
-    }
-
-    if (showNetworkManager) {
-        NetworkManagerScreen(
-            viewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
-            onBack = { showNetworkManager = false }
-        )
-        return
-    }
-
     val imageViewerFile by viewModel.imageViewerFile.collectAsStateWithLifecycle()
     if (imageViewerFile != null) {
         ImageViewerScreen(viewModel, file = imageViewerFile!!)
@@ -148,26 +110,6 @@ fun FileManagerApp(viewModel: FileManagerViewModel) {
         drawerContent = {
             DrawerContent(viewModel, onNavigate = {
                 scope.launch { drawerState.close() }
-            }, onOpenAnalyzer = {
-                scope.launch { 
-                    drawerState.close() 
-                    showStorageAnalyzer = true
-                }
-            }, onOpenAppManager = {
-                scope.launch { 
-                    drawerState.close() 
-                    showAppManager = true
-                }
-            }, onOpenMediaManager = {
-                scope.launch { 
-                    drawerState.close() 
-                    showMediaManager = true
-                }
-            }, onOpenNetworkManager = {
-                scope.launch { 
-                    drawerState.close() 
-                    showNetworkManager = true
-                }
             })
         }
     ) {
@@ -639,7 +581,7 @@ fun SortModeOption(label: String, icon: androidx.compose.ui.graphics.vector.Imag
 }
 
 @Composable
-fun DrawerContent(viewModel: FileManagerViewModel, onNavigate: () -> Unit, onOpenAnalyzer: () -> Unit = {}, onOpenAppManager: () -> Unit = {}, onOpenMediaManager: () -> Unit = {}, onOpenNetworkManager: () -> Unit = {}) {
+fun DrawerContent(viewModel: FileManagerViewModel, onNavigate: () -> Unit) {
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
     val storageVolumes by viewModel.storageVolumes.collectAsStateWithLifecycle()
     val currentCategory by viewModel.currentCategory.collectAsStateWithLifecycle()
@@ -692,13 +634,6 @@ fun DrawerContent(viewModel: FileManagerViewModel, onNavigate: () -> Unit, onOpe
                 NavigationDrawerItem(label = { Text("Music") }, icon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) }, selected = currentCategory == MediaCategory.MUSIC, onClick = { viewModel.selectCategory(MediaCategory.MUSIC); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
                 NavigationDrawerItem(label = { Text("Documents") }, icon = { Icon(Icons.AutoMirrored.Filled.Article, null) }, selected = false, onClick = { viewModel.navigateTo(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).absolutePath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
                 
-                HorizontalDivider()
-                
-                Text("Tools", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-                NavigationDrawerItem(label = { Text("App Manager") }, icon = { Icon(Icons.Default.Apps, null) }, selected = false, onClick = onOpenAppManager, modifier = Modifier.padding(horizontal = 12.dp))
-                NavigationDrawerItem(label = { Text("Storage Analyzer") }, icon = { Icon(Icons.Default.Analytics, null) }, selected = false, onClick = onOpenAnalyzer, modifier = Modifier.padding(horizontal = 12.dp))
-                NavigationDrawerItem(label = { Text("Media Manager") }, icon = { Icon(Icons.Default.PermMedia, null) }, selected = false, onClick = onOpenMediaManager, modifier = Modifier.padding(horizontal = 12.dp))
-                NavigationDrawerItem(label = { Text("Network Center") }, icon = { Icon(Icons.Default.Public, null) }, selected = false, onClick = onOpenNetworkManager, modifier = Modifier.padding(horizontal = 12.dp))
                 NavigationDrawerItem(label = { Text("Trash Bin") }, icon = { Icon(Icons.Default.Delete, null) }, selected = false, onClick = { viewModel.navigateTo(viewModel.trashDirPath); onNavigate() }, modifier = Modifier.padding(horizontal = 12.dp))
                 
                 if (bookmarks.isNotEmpty()) {
