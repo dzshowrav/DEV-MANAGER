@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Menu
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PermMedia
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.SdCard
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.ViewList
@@ -165,7 +167,7 @@ fun FileManagerScreen(
                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp))
                     }
                     items(storageVolumes) { volume ->
-                        val icon = if (volume.isRemovable) Icons.Default.Delete else Icons.Default.Home
+                        val icon = if (volume.isRemovable) Icons.Default.SdCard else Icons.Default.Folder
                         NavigationDrawerItem(
                             label = { Text(volume.name) },
                             icon = { Icon(icon, null) },
