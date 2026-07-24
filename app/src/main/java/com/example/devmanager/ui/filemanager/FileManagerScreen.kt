@@ -168,7 +168,7 @@ fun FileManagerScreen(
                         val icon = if (volume.isRemovable) Icons.Default.Apps else Icons.Default.Apps
                         NavigationDrawerItem(
                             label = { Text(volume.name) },
-                            icon = { Icon(if (volume.isRemovable) Icons.Default.Movie else Icons.Default.Storage, null) },
+                            icon = { Icon(if (volume.isRemovable) Icons.Default.SdCard else Icons.Default.Folder, null) },
                             selected = false,
                             onClick = { viewModel.navigateTo(volume.path); scope.launch { drawerState.close() } },
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)

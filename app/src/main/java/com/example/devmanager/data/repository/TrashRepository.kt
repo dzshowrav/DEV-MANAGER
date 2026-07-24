@@ -3,6 +3,7 @@ package com.example.devmanager.data.repository
 import com.example.devmanager.data.local.dao.TrashDao
 import com.example.devmanager.data.local.entity.TrashEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -51,10 +52,8 @@ class TrashRepository @Inject constructor(
 
     suspend fun emptyTrash(): Boolean {
         return try {
-            val all = trashDao.getAllTrash()
-            all.firstOrNull()?.let { items ->
-                items.forEach { fileRepository.delete(File(it.trashPath)) }
-            }
+            val items = trashDao.getAllTrash().first()
+            items.forEach { fileRepository.delete(File(it.trashPath)) }
             trashDao.clearAll()
             true
         } catch (_: Exception) { false }

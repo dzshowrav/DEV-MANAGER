@@ -144,7 +144,7 @@ class FileManagerViewModel @Inject constructor(
 
     fun refresh() { loadFiles() }
 
-    fun isBookmark(path: String) = bookmarkRepository.isBookmarked(path)
+    suspend fun isBookmark(path: String) = bookmarkRepository.isBookmarked(path)
 
     fun toggleBookmark(path: String, label: String) {
         viewModelScope.launch { bookmarkRepository.toggle(path, label) }
@@ -258,8 +258,8 @@ class FileManagerViewModel @Inject constructor(
 
     fun formatSize(bytes: Long) = fileRepository.formatSize(bytes)
     fun formatDate(timestamp: Long) = fileRepository.formatDate(timestamp)
-    fun getFileDetails(file: File) = fileRepository.getFileDetails(file)
-    fun calculateMd5(file: File) = fileRepository.calculateMd5(file)
+    suspend fun getFileDetails(file: File) = fileRepository.getFileDetails(file)
+    suspend fun calculateMd5(file: File) = fileRepository.calculateMd5(file)
 
     fun handleFileClick(file: File) {
         val extension = file.extension.lowercase()

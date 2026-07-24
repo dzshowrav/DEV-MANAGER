@@ -2,7 +2,7 @@ package com.example.devmanager.ui.components
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
-import androidx.compose.material.icons.automirrored.filled.Folder
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Code
@@ -50,7 +50,7 @@ private val archiveExt = setOf("zip", "rar", "7z", "tar", "gz")
 private val codeExt = setOf("kt", "java", "py", "js", "ts", "html", "css", "xml", "json", "sql", "sh")
 
 private fun getFileIcon(ext: String, isDir: Boolean): ImageVector {
-    if (isDir) return Icons.AutoMirrored.Filled.Folder
+    if (isDir) return Icons.Default.Folder
     return when (ext) {
         in imageExt -> Icons.Default.Image
         in videoExt -> Icons.Default.VideoFile

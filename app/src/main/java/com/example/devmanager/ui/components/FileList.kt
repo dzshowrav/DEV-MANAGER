@@ -159,6 +159,7 @@ fun FileCompactItem(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FileGridItem(
     item: FileItem,

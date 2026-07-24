@@ -29,6 +29,8 @@ import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.core.content.FileProvider
+import com.example.devmanager.R
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -122,7 +124,17 @@ fun DocumentViewerScreen(
                     }
 
                     // Share document
-                    IconButton(onClick = { shareFile(context, file!!) }) {
+                    IconButton(onClick = {
+                        try {
+                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file!!)
+                            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "*/*"
+                                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(android.content.Intent.createChooser(intent, "Share"))
+                        } catch (_: Exception) {}
+                    }) {
                         Icon(Icons.Default.Share, "Share File")
                     }
 
