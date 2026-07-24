@@ -1,4 +1,4 @@
-package com.example.devmanager
+package com.example.devmanager.ui.documentviewer
 
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.devmanager.ui.filemanager.FileManagerViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -43,7 +44,11 @@ import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DocumentViewerScreen(viewModel: FileManagerViewModel) {
+fun DocumentViewerScreen(
+    viewModel: FileManagerViewModel,
+    filePath: String? = null,
+    onBack: () -> Unit = {}
+) {
     val file by viewModel.docViewerFile.collectAsStateWithLifecycle()
     val docLines by viewModel.docLines.collectAsStateWithLifecycle()
     val excelSheets by viewModel.excelSheets.collectAsStateWithLifecycle()

@@ -1,4 +1,4 @@
-package com.example.devmanager
+package com.example.devmanager.ui.documentviewer
 
 import android.util.Xml
 import org.xmlpull.v1.XmlPullParser
