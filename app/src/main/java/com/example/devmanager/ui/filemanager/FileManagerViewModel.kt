@@ -231,7 +231,9 @@ class FileManagerViewModel @Inject constructor(
     fun copySelected(cut: Boolean = false) {
         _clipboardFiles.value = _selectedFiles.value.toList()
         _isCut.value = cut
-        _toastEvent.emit("${_selectedFiles.value.size} items ${if (cut) "cut" else "copied"}")
+        viewModelScope.launch {
+            _toastEvent.emit("${_selectedFiles.value.size} items ${if (cut) "cut" else "copied"}")
+        }
         clearSelection()
     }
 

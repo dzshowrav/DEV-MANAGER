@@ -165,10 +165,10 @@ fun FileManagerScreen(
                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp))
                     }
                     items(storageVolumes) { volume ->
-                        val icon = if (volume.isRemovable) Icons.Default.Apps else Icons.Default.Apps
+                        val icon = if (volume.isRemovable) Icons.Default.Delete else Icons.Default.Home
                         NavigationDrawerItem(
                             label = { Text(volume.name) },
-                            icon = { Icon(if (volume.isRemovable) Icons.Default.SdCard else Icons.Default.Folder, null) },
+                            icon = { Icon(icon, null) },
                             selected = false,
                             onClick = { viewModel.navigateTo(volume.path); scope.launch { drawerState.close() } },
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
