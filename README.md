@@ -17,24 +17,6 @@
 - **Trash Bin:** Built-in recycle bin allowing soft deletion and restoration of files.
 - **Categorized Library:** Quick access to Downloads, Images, Videos, Music, and Documents.
 
-### 💾 Storage Analyzer
-- **Visual Insights:** Instantly view storage consumption through dynamic Pie Charts.
-- **Deep Scan:** Identify space hogs with the "Top Largest Files" feature.
-- **Categorization:** Breaks down your storage usage by file type (Images, Videos, Audio, Documents, Archives, APKs).
-
-### 📱 App Manager
-- **System and User Apps:** Distinguish between user-installed apps and system applications.
-- **Quick Actions:** Launch, extract APK, check properties, and open system settings for any app.
-
-### 🎬 Media Manager
-- **Media Hub:** Browse the `DCIM` and `Pictures` directories with a smart grid interface.
-- **Quick Preview:** Thumbnail previews for images with zoom/pan functionality.
-
-### 🌐 Network Center
-- **Network Details:** View your current Wi-Fi SSID, connection speed, BSSID, and network capabilities.
-- **Ping Tool:** Built-in ping utility to check connectivity and latency to remote hosts (e.g., google.com).
-- **Port Scanner:** Scan ports on target IP addresses to identify open services.
-
 ## 🛠 Tech Stack
 
 - **UI Toolkit:** Jetpack Compose (Material 3)
