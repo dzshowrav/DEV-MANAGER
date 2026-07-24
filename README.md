@@ -1,6 +1,4 @@
-<div align="center">
-<img width="800" alt="Dev Manager Thumbnail" src="app/src/main/res/drawable/dev_manager_thumbnail_1779986755637.png" />
-</div>
+[![Build Android APK](https://github.com/dzshowrav/DEV-MANAGER/actions/workflows/android.yml/badge.svg)](https://github.com/dzshowrav/DEV-MANAGER/actions/workflows/android.yml)
 
 # DEV MANAGER - Advanced Android System & File Tool
 
